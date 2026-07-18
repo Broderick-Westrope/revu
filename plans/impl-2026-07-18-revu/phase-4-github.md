@@ -1,6 +1,6 @@
 # Phase 4: GitHub Read-Only Integration
 
-> **Status:** DRAFT
+> **Status:** COMPLETED
 > Part of `plans/impl-2026-07-18-revu/README.md` — depends on Phases 1–3.
 
 ## Specification

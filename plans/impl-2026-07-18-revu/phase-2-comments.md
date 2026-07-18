@@ -1,6 +1,6 @@
 # Phase 2: Local Comments and Markdown Export
 
-> **Status:** DRAFT
+> **Status:** COMPLETED
 > Part of `plans/impl-2026-07-18-revu/README.md` — depends on Phase 1. Parallel with Phase 3.
 
 ## Specification

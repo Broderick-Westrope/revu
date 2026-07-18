@@ -1,6 +1,6 @@
 # Phase 1: Core — Scaffold, Scope, Git Engine, Diff Opening
 
-> **Status:** DRAFT
+> **Status:** COMPLETED
 > Part of `plans/impl-2026-07-18-revu/README.md`
 
 ## Specification
