@@ -2,32 +2,37 @@
 
 Guided code review and local review comments, inside VS Code and Cursor.
 
-Revu makes reviewing code easier, more thorough, and faster. It gives you an AI-generated map of a change before you read a line of it, and a place to leave comments that were always destined for an AI conversation rather than a PR thread.
+## Why this exists
 
-## Why
+This is a personal tool built around one specific review flow. AI review is already handled elsewhere: an agent reviews changes in my terminal harness, [anvil](https://github.com/Broderick-Westrope/anvil). But I still want to review changes manually, and that's where the gaps were.
 
-Good review tooling exists, but it's scattered. Linear generates guided reviews for PRs. pair-review runs local diff review in a browser. Comment-renderer exports editor comments as markdown. Each solves one piece, each lives somewhere else, and none of them work together. Revu brings the human-in-the-loop parts of that workflow into the editor you already review code in.
+When I sit down to review a PR (mine or someone else's), the flow looks like this:
 
-Three problems it solves:
+1. **Get oriented.** Before reading any code, I want guidance on how to approach the review: which files form the core of the change, which are supporting noise, and what order to read them in.
+2. **Read and annotate.** As I work through the diffs, I leave comments on the code. These aren't PR comments; they're questions, doubts, and things I want to verify. They belong to me, not the thread.
+3. **Collaborate with the agent.** I hand those comments to the agent in my terminal to answer the questions, validate my understanding, and dig into anything suspicious.
+4. **Finalise on GitHub.** Whatever survives that conversation becomes actual PR feedback, left via the official [GitHub Pull Requests](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-requests) extension as usual.
 
-**Large diffs have no entry point.** A 3000-line PR is a wall. Revu asks an agent CLI to group the changed files by theme (the core functionality, the tests that cover it, the generated noise), order the groups by review priority, and annotate each with what to watch for. You read the guide, then work through the diffs in an order that makes sense.
+Steps 1–3 had no good home. The pieces existed, but spread across three tools in three different places:
 
-**Reviewing your own work means pushing it first.** Most tools only review PRs. Revu reviews whatever is checked out: uncommitted working-tree changes or the whole branch against its merge-base. No push, no draft PR, no leaving the editor.
+- [Linear's guided reviews](https://linear.app/docs/diffs#guides) do the orientation step beautifully, but only for PRs, and only in Linear.
+- [pair-review](https://github.com/in-the-loop-labs/pair-review) reviews local changes with AI assistance, but in a browser, outside the editor.
+- [comment-renderer](https://marketplace.visualstudio.com/items?itemName=statiolake.vscode-comment-renderer) exports editor comments as markdown for agents, but without diff scopes or review guidance.
 
-**Review comments for AI live in the wrong places.** When you review AI-generated code, your comments are feedback for the agent, not for GitHub. Revu keeps them local, attaches the exact code context, and exports the whole set as markdown built for pasting into a terminal agent. When you're reviewing someone else's PR, it pulls the existing GitHub threads in read-only so you can quote them into your notes, and it never writes anything back.
+Revu is those three ideas rebuilt as one extension, in the editor where the review actually happens. Credit to all three for the inspiration.
 
 ## How it works
 
-1. **Start a review** — `Revu: Start Review`, pick a scope: working tree vs HEAD (untracked files included) or current branch vs merge-base with the default branch. If the branch has an open PR, Revu fetches its metadata and review threads via `gh`.
+1. **Start a review** — `Revu: Start Review`, pick a scope: working tree vs HEAD (untracked files included) or current branch vs merge-base with the default branch. No push or PR needed for your own work. If the branch does have an open PR, Revu fetches its metadata and review threads via `gh`.
 2. **Generate a guide** — `Revu: Generate Review Guide` sends the diff to your agent CLI (default `claude -p`) and opens the guide in an editor tab: overall summary, themed sections in suggested review order, attention notes, and clickable file rows. Files open as native diffs in the adjacent editor group, jumping straight to the lines the note references. Mark files read as you go. The sidebar tree mirrors the sections for quick navigation.
-3. **Leave comments** — use the native commenting UI (the `+` in the gutter) on any line or range. Comments persist per workspace and never leave your machine. Quote a GitHub thread into a local comment when you want to discuss someone's feedback.
-4. **Hand off to AI** — `Revu: Copy All Comments` puts the full set on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads, your notes. Paste it into your agent and discuss.
+3. **Leave comments** — use the native commenting UI (the `+` in the gutter) on any line or range. Comments persist per workspace and never leave your machine. Existing GitHub threads render inline read-only, and you can quote one into a local comment when you want to discuss someone's feedback with the agent.
+4. **Hand off to the agent** — `Revu: Copy All Comments` puts the full set on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads, your notes. Paste it into the terminal agent and work through it together.
 
 Guides are cached per scope and flagged stale when the changed-file set drifts, so reopening a review is instant.
 
 ## Read-only by design
 
-Revu never writes to GitHub. No replies, no review submission, no mutations of any kind; a guard test fails the suite if a write path ever appears in the source. Publishing comments to a PR stays in the tools that already do it well.
+Revu never writes to GitHub. No replies, no review submission, no mutations of any kind; a guard test fails the suite if a write path ever appears in the source. That's deliberate: local comments are drafts for an agent conversation, and it should be impossible to accidentally publish one. Posting real PR feedback stays with the GitHub extension.
 
 ## Requirements
 
