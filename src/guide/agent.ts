@@ -2,6 +2,12 @@ import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import { getActiveScope } from '../scope';
 
+export class AgentError extends Error {
+  constructor(message: string, readonly rawOutput: string) {
+    super(message);
+  }
+}
+
 export async function runAgent(prompt: string, token: vscode.CancellationToken): Promise<string> {
   const config = vscode.workspace.getConfiguration('revu');
   const command = config.get<string>('agentCommand', 'claude -p').trim();
@@ -53,7 +59,12 @@ export async function runAgent(prompt: string, token: vscode.CancellationToken):
       } else {
         const excerpt = stderr.trim().slice(0, 500);
         finish(() =>
-          reject(new Error(`Agent exited with code ${code}${excerpt ? `: ${excerpt}` : ''}`))
+          reject(
+            new AgentError(
+              `Agent exited with code ${code}${excerpt ? `: ${excerpt}` : ''}`,
+              stdout
+            )
+          )
         );
       }
     });
