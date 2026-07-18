@@ -141,10 +141,10 @@ ${body}
 export function renderGuideHtml(
   guide: Guide,
   nonce: string,
-  readPaths: ReadonlySet<string> = new Set()
+  readIds: ReadonlySet<string> = new Set()
 ): string {
   const sections = guide.groups
-    .map((group, i) => {
+    .map((group, gi) => {
       const attention =
         group.attention.length > 0
           ? `<ul class="attention">${group.attention
@@ -152,10 +152,11 @@ export function renderGuideHtml(
               .join('')}</ul>`
           : '';
       const files = group.files
-        .map((file) => {
+        .map((file, fi) => {
+          const id = `${gi}:${fi}`;
           const note = file.note ? `<span class="note">${renderInline(file.note)}</span>` : '';
-          const read = readPaths.has(file.path);
-          return `<li class="file${read ? ' visited' : ''}" data-path="${escapeHtml(
+          const read = readIds.has(id);
+          return `<li class="file${read ? ' visited' : ''}" data-id="${id}" data-path="${escapeHtml(
             file.path
           )}"><span class="path">${escapeHtml(file.path)}</span>${note}<button class="check" title="Toggle read">${
             read ? '✓' : '○'
@@ -163,7 +164,7 @@ export function renderGuideHtml(
         })
         .join('');
       return `<section>
-<h2>${i + 1}. ${renderInline(group.title)}</h2>
+<h2>${gi + 1}. ${renderInline(group.title)}</h2>
 <p class="theme">${renderInline(group.theme)}</p>
 ${attention}
 <ul class="files">${files}</ul>
@@ -179,11 +180,11 @@ ${sections}`;
 const vscode = acquireVsCodeApi();
 for (const row of document.querySelectorAll('li.file')) {
   row.addEventListener('click', () => {
-    vscode.postMessage({ type: 'openFile', path: row.dataset.path });
+    vscode.postMessage({ type: 'openFile', id: row.dataset.id, path: row.dataset.path });
   });
   row.querySelector('.check').addEventListener('click', (event) => {
     event.stopPropagation();
-    vscode.postMessage({ type: 'toggleRead', path: row.dataset.path });
+    vscode.postMessage({ type: 'toggleRead', id: row.dataset.id, path: row.dataset.path });
   });
 }
 `;
@@ -210,7 +211,23 @@ function makeNonce(): string {
 
 interface WebviewMessage {
   type: string;
+  id?: string;
   path?: string;
+}
+
+function fileById(
+  guide: Guide | undefined,
+  id: string | undefined,
+  filePath: string
+): { note?: string } | undefined {
+  if (guide && id) {
+    const [gi, fi] = id.split(':').map((n) => parseInt(n, 10));
+    const file = guide.groups[gi]?.files[fi];
+    if (file && file.path === filePath) {
+      return file;
+    }
+  }
+  return guide?.groups.flatMap((group) => group.files).find((file) => file.path === filePath);
 }
 
 async function handleMessage(
@@ -230,22 +247,26 @@ async function handleMessage(
     return;
   }
   if (message.type === 'toggleRead') {
+    if (typeof message.id !== 'string') {
+      return;
+    }
     const key = scopeKey(scope);
-    await cache.setRead(key, message.path, !cache.isRead(key, message.path));
+    await cache.setRead(key, message.id, !cache.isRead(key, message.id));
     rerender();
     return;
   }
   if (message.type !== 'openFile') {
     return;
   }
-  if (vscode.workspace.getConfiguration('revu').get<boolean>('autoMarkRead', false)) {
-    await cache.setRead(scopeKey(scope), message.path, true);
+  if (
+    typeof message.id === 'string' &&
+    vscode.workspace.getConfiguration('revu').get<boolean>('autoMarkRead', false)
+  ) {
+    await cache.setRead(scopeKey(scope), message.id, true);
     rerender();
   }
   const cached = cache.get(scopeKey(scope));
-  const note = cached?.guide.groups
-    .flatMap((group) => group.files)
-    .find((file) => file.path === message.path)?.note;
+  const note = fileById(cached?.guide, message.id, message.path)?.note;
   const lines = parseLineRange(note);
   const range = lines
     ? new vscode.Range(lines.start - 1, 0, lines.end - 1, 0)
@@ -287,7 +308,7 @@ export function registerGuideWebview(
     const cached = scope ? cache.get(scopeKey(scope)) : undefined;
     panel.webview.html =
       scope && cached
-        ? renderGuideHtml(cached.guide, makeNonce(), new Set(cache.readPaths(scopeKey(scope))))
+        ? renderGuideHtml(cached.guide, makeNonce(), new Set(cache.readMarks(scopeKey(scope))))
         : renderEmptyHtml(makeNonce());
   };
 

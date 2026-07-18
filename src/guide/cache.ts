@@ -28,21 +28,21 @@ export class GuideCache {
     await this.memento.update(READ_PREFIX + cached.scopeKey, undefined);
   }
 
-  readPaths(scopeKey: string): string[] {
+  readMarks(scopeKey: string): string[] {
     return this.memento.get<string[]>(READ_PREFIX + scopeKey, []);
   }
 
-  isRead(scopeKey: string, filePath: string): boolean {
-    return this.readPaths(scopeKey).includes(filePath);
+  isRead(scopeKey: string, id: string): boolean {
+    return this.readMarks(scopeKey).includes(id);
   }
 
-  async setRead(scopeKey: string, filePath: string, read: boolean): Promise<void> {
-    const current = this.readPaths(scopeKey);
+  async setRead(scopeKey: string, id: string, read: boolean): Promise<void> {
+    const current = this.readMarks(scopeKey);
     const next = read
-      ? current.includes(filePath)
+      ? current.includes(id)
         ? current
-        : [...current, filePath]
-      : current.filter((p) => p !== filePath);
+        : [...current, id]
+      : current.filter((p) => p !== id);
     await this.memento.update(READ_PREFIX + scopeKey, next.length > 0 ? next : undefined);
   }
 

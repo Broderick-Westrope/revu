@@ -73,11 +73,34 @@ suite('renderGuideHtml', () => {
   });
 
   test('marks read files with the visited class and check mark', () => {
-    const out = renderGuideHtml(guide, 'n', new Set(['src/auth.ts']));
-    assert.ok(out.includes('class="file visited" data-path="src/auth.ts"'));
-    assert.ok(out.includes('class="file" data-path="README.md"'));
+    const out = renderGuideHtml(guide, 'n', new Set(['0:0']));
+    assert.ok(out.includes('class="file visited" data-id="0:0" data-path="src/auth.ts"'));
+    assert.ok(out.includes('class="file" data-id="1:0" data-path="README.md"'));
     const authRow = out.slice(out.indexOf('data-path="src/auth.ts"'), out.indexOf('data-path="src/auth.test.ts"'));
     assert.ok(authRow.includes('✓'));
+  });
+
+  test('same path in multiple groups gets distinct row ids and independent read state', () => {
+    const repeated: Guide = {
+      summary: 's',
+      groups: [
+        {
+          title: 'Config',
+          theme: 't',
+          attention: [],
+          files: [{ path: 'some.yaml', note: 'Lines 10-20: config' }],
+        },
+        {
+          title: 'Cleanup',
+          theme: 't',
+          attention: [],
+          files: [{ path: 'some.yaml', note: 'Lines 100-110: cleanup' }],
+        },
+      ],
+    };
+    const out = renderGuideHtml(repeated, 'n', new Set(['1:0']));
+    assert.ok(out.includes('class="file" data-id="0:0" data-path="some.yaml"'));
+    assert.ok(out.includes('class="file visited" data-id="1:0" data-path="some.yaml"'));
   });
 
   test('renders unread rows with an unread toggle', () => {
@@ -132,29 +155,29 @@ function stubMemento(): vscode.Memento {
 suite('guide read state', () => {
   test('setRead persists and isRead reflects it', async () => {
     const cache = new GuideCache(stubMemento());
-    assert.strictEqual(cache.isRead('scope', 'a.ts'), false);
-    await cache.setRead('scope', 'a.ts', true);
-    assert.strictEqual(cache.isRead('scope', 'a.ts'), true);
-    assert.deepStrictEqual(cache.readPaths('scope'), ['a.ts']);
-    await cache.setRead('scope', 'a.ts', false);
-    assert.strictEqual(cache.isRead('scope', 'a.ts'), false);
+    assert.strictEqual(cache.isRead('scope', '0:0'), false);
+    await cache.setRead('scope', '0:0', true);
+    assert.strictEqual(cache.isRead('scope', '0:0'), true);
+    assert.deepStrictEqual(cache.readMarks('scope'), ['0:0']);
+    await cache.setRead('scope', '0:0', false);
+    assert.strictEqual(cache.isRead('scope', '0:0'), false);
   });
 
   test('read state is scoped per scope key', async () => {
     const cache = new GuideCache(stubMemento());
-    await cache.setRead('one', 'a.ts', true);
-    assert.strictEqual(cache.isRead('two', 'a.ts'), false);
+    await cache.setRead('one', '0:0', true);
+    assert.strictEqual(cache.isRead('two', '0:0'), false);
   });
 
   test('put clears read state for the scope', async () => {
     const cache = new GuideCache(stubMemento());
-    await cache.setRead('scope', 'a.ts', true);
+    await cache.setRead('scope', '0:0', true);
     await cache.put({
       guide: { summary: 's', groups: [] },
       scopeKey: 'scope',
       hash: 'h',
       generatedAt: '2026-07-18T00:00:00.000Z',
     });
-    assert.deepStrictEqual(cache.readPaths('scope'), []);
+    assert.deepStrictEqual(cache.readMarks('scope'), []);
   });
 });
