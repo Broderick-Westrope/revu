@@ -82,7 +82,7 @@ suite('comment store', () => {
     assert.deepStrictEqual(second.all(), [comment]);
   });
 
-  test('onDidChange fires on every mutation', () => {
+  test('onDidChange fires on every change', () => {
     const store = new CommentStore(stubMemento());
     let fired = 0;
     store.onDidChange(() => {

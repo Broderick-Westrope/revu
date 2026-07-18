@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { changedFiles, diffText, nameStatusHash } from '../git';
-import { getActiveScope, scopeKey } from '../scope';
+import { getActiveScope, getPrContext, scopeKey } from '../scope';
 import { runAgent, AgentError } from '../guide/agent';
 import { fireGuideChanged, GuideCache } from '../guide/cache';
 import { parseGuide } from '../guide/model';
@@ -26,7 +26,9 @@ export async function generateGuide(cache: GuideCache): Promise<void> {
     return;
   }
   const diff = await diffText(scope.repoRoot, scope.baseRef);
-  const prompt = buildPrompt(files, diff);
+  const pr = getPrContext();
+  const prContext = pr ? `PR #${pr.number}: ${pr.title}\n\n${pr.body}` : undefined;
+  const prompt = buildPrompt(files, diff, prContext);
 
   let raw: string | undefined;
   try {
