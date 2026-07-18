@@ -49,6 +49,7 @@ export async function generateGuide(cache: GuideCache): Promise<void> {
       generatedAt: new Date().toISOString(),
     });
     fireGuideChanged();
+    await vscode.commands.executeCommand('revu.openGuide');
   } catch (err) {
     const message = `Revu: guide generation failed: ${(err as Error).message}`;
     const output = err instanceof AgentError ? err.rawOutput : raw;

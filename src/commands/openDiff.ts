@@ -2,16 +2,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangedFile } from '../git';
 import { makeGitUri } from '../gitContentProvider';
-import { getActiveScope } from '../scope';
+import { getActiveScope, ReviewScope } from '../scope';
 
-export async function openDiff(file: ChangedFile | string): Promise<void> {
-  const scope = getActiveScope();
-  if (!scope) {
-    void vscode.window.showErrorMessage('Revu: no active review. Run "Revu: Start Review" first.');
-    return;
-  }
-
-  const changed: ChangedFile = typeof file === 'string' ? { path: file, status: 'M' } : file;
+export async function showDiff(
+  changed: ChangedFile,
+  scope: ReviewScope,
+  options?: vscode.TextDocumentShowOptions
+): Promise<void> {
   const { repoRoot, baseRef } = scope;
   const fileUri = (p: string): vscode.Uri => vscode.Uri.file(path.join(repoRoot, p));
 
@@ -23,7 +20,8 @@ export async function openDiff(file: ChangedFile | string): Promise<void> {
         'vscode.diff',
         makeGitUri(repoRoot, baseRef, changed.path),
         fileUri(changed.path),
-        `${path.basename(changed.path)} (Revu)`
+        `${path.basename(changed.path)} (Revu)`,
+        options
       );
       break;
     case 'D':
@@ -31,7 +29,8 @@ export async function openDiff(file: ChangedFile | string): Promise<void> {
         'vscode.diff',
         makeGitUri(repoRoot, baseRef, changed.path),
         makeGitUri(repoRoot, 'EMPTY', changed.path),
-        `${path.basename(changed.path)} (deleted)`
+        `${path.basename(changed.path)} (deleted)`,
+        options
       );
       break;
     case 'R': {
@@ -40,9 +39,21 @@ export async function openDiff(file: ChangedFile | string): Promise<void> {
         'vscode.diff',
         makeGitUri(repoRoot, baseRef, oldPath),
         fileUri(changed.path),
-        `${path.basename(oldPath)} → ${path.basename(changed.path)}`
+        `${path.basename(oldPath)} → ${path.basename(changed.path)}`,
+        options
       );
       break;
     }
   }
+}
+
+export async function openDiff(file: ChangedFile | string): Promise<void> {
+  const scope = getActiveScope();
+  if (!scope) {
+    void vscode.window.showErrorMessage('Revu: no active review. Run "Revu: Start Review" first.');
+    return;
+  }
+
+  const changed: ChangedFile = typeof file === 'string' ? { path: file, status: 'M' } : file;
+  await showDiff(changed, scope);
 }

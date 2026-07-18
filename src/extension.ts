@@ -9,6 +9,7 @@ import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { GithubThreadRenderer } from './github/threadRenderer';
 import { GuideCache, guideDisposables } from './guide/cache';
 import { registerGuideTree } from './guide/treeView';
+import { registerGuideWebview } from './guide/webview';
 import { scopeDisposables } from './scope';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -33,6 +34,7 @@ export function activate(context: vscode.ExtensionContext): void {
     )
   );
   registerGuideTree(context, guideCache);
+  registerGuideWebview(context, guideCache);
   void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
 }
 
