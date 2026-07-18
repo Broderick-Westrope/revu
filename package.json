@@ -11,6 +11,7 @@
     "commands": [
       { "command": "revu.startReview", "title": "Revu: Start Review" },
       { "command": "revu.endReview", "title": "Revu: End Review" },
+      { "command": "revu.refreshPrThreads", "title": "Revu: Refresh PR Threads" },
       { "command": "revu.openDiff", "title": "Revu: Open Diff" },
       { "command": "revu.generateGuide", "title": "Revu: Generate Review Guide", "icon": "$(sparkle)" },
       { "command": "revu.createComment", "title": "Add Local Comment" },

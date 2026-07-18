@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PrMetadata } from './github/model';
 
 export type ScopeType = 'workingTree' | 'branch';
 
@@ -30,4 +31,14 @@ export function clearActiveScope(): void {
 
 export function scopeKey(scope: ReviewScope): string {
   return scope.type === 'workingTree' ? 'workingTree' : `branch:${scope.baseRef}`;
+}
+
+let prContext: PrMetadata | undefined;
+
+export function setPrContext(meta: PrMetadata | undefined): void {
+  prContext = meta;
+}
+
+export function getPrContext(): PrMetadata | undefined {
+  return prContext;
 }
