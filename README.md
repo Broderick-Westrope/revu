@@ -15,6 +15,7 @@ Guided review and local review comments for AI-assisted workflows, inside VS Cod
 | `revu.agentCommand` | `claude -p` | Agent CLI command used for guide generation; receives the prompt on stdin. |
 | `revu.agentTimeoutSeconds` | `120` | Minimum timeout for guide generation. The effective timeout scales with prompt size (`60 + promptChars / 1000` seconds, clamped between this minimum and `revu.agentTimeoutMaxSeconds`). |
 | `revu.agentTimeoutMaxSeconds` | `600` | Upper bound for the size-scaled guide generation timeout. |
+| `revu.autoMarkRead` | `false` | Automatically mark a guide file as read when opened from the guide. Files can always be marked read/unread manually with the toggle at the end of each row in the guide panel. |
 
 ## Known limitations
 

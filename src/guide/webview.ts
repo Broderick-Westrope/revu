@@ -81,13 +81,21 @@ const STYLE = `
   }
   li.file .check {
     margin-left: auto;
-    visibility: hidden;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: var(--vscode-foreground);
+    padding: 0 5px;
+    cursor: pointer;
+    opacity: 0.6;
+  }
+  li.file .check:hover {
+    border-color: var(--vscode-editorWidget-border);
+    background: none;
+    opacity: 1;
   }
   li.file.visited {
     opacity: 0.6;
-  }
-  li.file.visited .check {
-    visibility: visible;
   }
   code {
     font-family: var(--vscode-editor-font-family);
@@ -129,7 +137,11 @@ ${body}
 </html>`;
 }
 
-export function renderGuideHtml(guide: Guide, nonce: string): string {
+export function renderGuideHtml(
+  guide: Guide,
+  nonce: string,
+  readPaths: ReadonlySet<string> = new Set()
+): string {
   const sections = guide.groups
     .map((group, i) => {
       const attention =
@@ -141,9 +153,12 @@ export function renderGuideHtml(guide: Guide, nonce: string): string {
       const files = group.files
         .map((file) => {
           const note = file.note ? `<span class="note">${renderInline(file.note)}</span>` : '';
-          return `<li class="file" data-path="${escapeHtml(file.path)}"><span class="path">${escapeHtml(
+          const read = readPaths.has(file.path);
+          return `<li class="file${read ? ' visited' : ''}" data-path="${escapeHtml(
             file.path
-          )}</span>${note}<span class="check">✓</span></li>`;
+          )}"><span class="path">${escapeHtml(file.path)}</span>${note}<button class="check" title="Toggle read">${
+            read ? '✓' : '○'
+          }</button></li>`;
         })
         .join('');
       return `<section>
@@ -163,8 +178,11 @@ ${sections}`;
 const vscode = acquireVsCodeApi();
 for (const row of document.querySelectorAll('li.file')) {
   row.addEventListener('click', () => {
-    row.classList.add('visited');
     vscode.postMessage({ type: 'openFile', path: row.dataset.path });
+  });
+  row.querySelector('.check').addEventListener('click', (event) => {
+    event.stopPropagation();
+    vscode.postMessage({ type: 'toggleRead', path: row.dataset.path });
   });
 }
 `;
@@ -194,17 +212,34 @@ interface WebviewMessage {
   path?: string;
 }
 
-async function handleMessage(message: WebviewMessage): Promise<void> {
+async function handleMessage(
+  message: WebviewMessage,
+  cache: GuideCache,
+  rerender: () => void
+): Promise<void> {
   if (message.type === 'generate') {
     await vscode.commands.executeCommand('revu.generateGuide');
     return;
   }
-  if (message.type !== 'openFile' || typeof message.path !== 'string') {
+  if (typeof message.path !== 'string') {
     return;
   }
   const scope = getActiveScope();
   if (!scope) {
     return;
+  }
+  if (message.type === 'toggleRead') {
+    const key = scopeKey(scope);
+    await cache.setRead(key, message.path, !cache.isRead(key, message.path));
+    rerender();
+    return;
+  }
+  if (message.type !== 'openFile') {
+    return;
+  }
+  if (vscode.workspace.getConfiguration('revu').get<boolean>('autoMarkRead', false)) {
+    await cache.setRead(scopeKey(scope), message.path, true);
+    rerender();
   }
   const options: vscode.TextDocumentShowOptions = {
     viewColumn: vscode.ViewColumn.Two,
@@ -237,9 +272,10 @@ export function registerGuideWebview(
     }
     const scope = getActiveScope();
     const cached = scope ? cache.get(scopeKey(scope)) : undefined;
-    panel.webview.html = cached
-      ? renderGuideHtml(cached.guide, makeNonce())
-      : renderEmptyHtml(makeNonce());
+    panel.webview.html =
+      scope && cached
+        ? renderGuideHtml(cached.guide, makeNonce(), new Set(cache.readPaths(scopeKey(scope))))
+        : renderEmptyHtml(makeNonce());
   };
 
   const open = (): void => {
@@ -254,7 +290,9 @@ export function registerGuideWebview(
       { enableScripts: true, localResourceRoots: [] }
     );
     panelDisposables.push(
-      panel.webview.onDidReceiveMessage((message: WebviewMessage) => void handleMessage(message))
+      panel.webview.onDidReceiveMessage(
+        (message: WebviewMessage) => void handleMessage(message, cache, render)
+      )
     );
     panel.onDidDispose(() => {
       panel = undefined;

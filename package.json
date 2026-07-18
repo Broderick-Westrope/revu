@@ -111,6 +111,11 @@
           "type": "number",
           "default": 600,
           "description": "Upper bound for the size-scaled guide generation timeout."
+        },
+        "revu.autoMarkRead": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically mark a guide file as read when opened from the guide."
         }
       }
     }

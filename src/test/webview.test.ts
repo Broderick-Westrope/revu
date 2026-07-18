@@ -1,4 +1,6 @@
 import * as assert from 'assert';
+import * as vscode from 'vscode';
+import { GuideCache } from '../guide/cache';
 import { Guide } from '../guide/model';
 import { escapeHtml, renderGuideHtml, renderInline } from '../guide/webview';
 
@@ -69,6 +71,19 @@ suite('renderGuideHtml', () => {
     const docsSection = html.slice(html.indexOf('2. Docs'));
     assert.ok(!docsSection.includes('class="attention"'));
   });
+
+  test('marks read files with the visited class and check mark', () => {
+    const out = renderGuideHtml(guide, 'n', new Set(['src/auth.ts']));
+    assert.ok(out.includes('class="file visited" data-path="src/auth.ts"'));
+    assert.ok(out.includes('class="file" data-path="README.md"'));
+    const authRow = out.slice(out.indexOf('data-path="src/auth.ts"'), out.indexOf('data-path="src/auth.test.ts"'));
+    assert.ok(authRow.includes('✓'));
+  });
+
+  test('renders unread rows with an unread toggle', () => {
+    assert.ok(!html.includes('class="file visited"'));
+    assert.ok(html.includes('<button class="check" title="Toggle read">○</button>'));
+  });
 });
 
 suite('escapeHtml', () => {
@@ -97,5 +112,49 @@ suite('renderInline', () => {
 
   test('handles multiple spans non-greedily', () => {
     assert.strictEqual(renderInline('`a` and `b`'), '<code>a</code> and <code>b</code>');
+  });
+});
+
+function stubMemento(): vscode.Memento {
+  const data = new Map<string, unknown>();
+  return {
+    keys: () => [...data.keys()],
+    get: <T>(key: string, defaultValue?: T): T | undefined => {
+      return data.has(key) && data.get(key) !== undefined ? (data.get(key) as T) : defaultValue;
+    },
+    update: (key: string, value: unknown): Thenable<void> => {
+      data.set(key, value);
+      return Promise.resolve();
+    },
+  };
+}
+
+suite('guide read state', () => {
+  test('setRead persists and isRead reflects it', async () => {
+    const cache = new GuideCache(stubMemento());
+    assert.strictEqual(cache.isRead('scope', 'a.ts'), false);
+    await cache.setRead('scope', 'a.ts', true);
+    assert.strictEqual(cache.isRead('scope', 'a.ts'), true);
+    assert.deepStrictEqual(cache.readPaths('scope'), ['a.ts']);
+    await cache.setRead('scope', 'a.ts', false);
+    assert.strictEqual(cache.isRead('scope', 'a.ts'), false);
+  });
+
+  test('read state is scoped per scope key', async () => {
+    const cache = new GuideCache(stubMemento());
+    await cache.setRead('one', 'a.ts', true);
+    assert.strictEqual(cache.isRead('two', 'a.ts'), false);
+  });
+
+  test('put clears read state for the scope', async () => {
+    const cache = new GuideCache(stubMemento());
+    await cache.setRead('scope', 'a.ts', true);
+    await cache.put({
+      guide: { summary: 's', groups: [] },
+      scopeKey: 'scope',
+      hash: 'h',
+      generatedAt: '2026-07-18T00:00:00.000Z',
+    });
+    assert.deepStrictEqual(cache.readPaths('scope'), []);
   });
 });
