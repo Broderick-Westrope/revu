@@ -69,6 +69,7 @@ export async function runAgent(prompt: string, token: vscode.CancellationToken):
       }
     });
 
+    child.stdin.on('error', () => {});
     child.stdin.write(prompt);
     child.stdin.end();
   });

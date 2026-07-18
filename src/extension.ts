@@ -7,14 +7,17 @@ import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { GithubThreadRenderer } from './github/threadRenderer';
-import { GuideCache } from './guide/cache';
+import { GuideCache, guideDisposables } from './guide/cache';
 import { registerGuideTree } from './guide/treeView';
+import { scopeDisposables } from './scope';
 
 export function activate(context: vscode.ExtensionContext): void {
   const guideCache = new GuideCache(context.workspaceState);
   const renderer = new GithubThreadRenderer();
   context.subscriptions.push(
     renderer,
+    ...scopeDisposables(),
+    ...guideDisposables(),
     vscode.workspace.registerTextDocumentContentProvider(REVU_GIT_SCHEME, new GitContentProvider()),
     vscode.commands.registerCommand('revu.startReview', () => startReview(renderer)),
     vscode.commands.registerCommand('revu.endReview', () => endReview(renderer)),

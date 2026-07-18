@@ -160,4 +160,59 @@ suite('github thread parsing', () => {
   test('returns empty array when reviewThreads is missing', () => {
     assert.deepStrictEqual(parseThreadsResponse('{"data":{}}'), []);
   });
+
+  test('merges concatenated JSON documents from older gh --paginate output', () => {
+    const pageOne = makeResponse([
+      {
+        path: 'src/page1.ts',
+        line: 1,
+        startLine: null,
+        isResolved: false,
+        comments: { nodes: [makeComment({ body: 'Page one, with "quotes" and }braces{' })] },
+      },
+    ]);
+    const pageTwo = makeResponse([
+      {
+        path: 'src/page2.ts',
+        line: 2,
+        startLine: null,
+        isResolved: true,
+        comments: { nodes: [makeComment({ body: 'Page two' })] },
+      },
+    ]);
+    const threads = parseThreadsResponse(`${pageOne}\n${pageTwo}`);
+    assert.strictEqual(threads.length, 2);
+    assert.deepStrictEqual(
+      threads.map((t) => t.path),
+      ['src/page1.ts', 'src/page2.ts']
+    );
+    assert.strictEqual(threads[0].comments[0].body, 'Page one, with "quotes" and }braces{');
+    assert.strictEqual(threads[1].isResolved, true);
+  });
+
+  test('merges concatenated JSON documents without newline separators', () => {
+    const pageOne = makeResponse([
+      {
+        path: 'src/a.ts',
+        line: 1,
+        startLine: null,
+        isResolved: false,
+        comments: { nodes: [makeComment()] },
+      },
+    ]);
+    const pageTwo = makeResponse([
+      {
+        path: 'src/b.ts',
+        line: 2,
+        startLine: null,
+        isResolved: false,
+        comments: { nodes: [makeComment()] },
+      },
+    ]);
+    const threads = parseThreadsResponse(pageOne + pageTwo);
+    assert.deepStrictEqual(
+      threads.map((t) => t.path),
+      ['src/a.ts', 'src/b.ts']
+    );
+  });
 });

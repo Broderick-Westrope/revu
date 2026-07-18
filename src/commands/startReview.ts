@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { currentBranch, defaultBranch, mergeBase, repoRoot } from '../git';
-import { fetchPrMetadata, fetchReviewThreads, isGhAvailable } from '../github/gh';
+import { fetchPrMetadata, fetchReviewThreads, isGhAvailable, resetGhAvailability } from '../github/gh';
 import { GithubThreadRenderer } from '../github/threadRenderer';
 import {
   clearActiveScope,
@@ -15,6 +15,7 @@ export async function refreshPrThreads(renderer: GithubThreadRenderer): Promise<
   if (!scope) {
     return;
   }
+  resetGhAvailability();
   try {
     if (!(await isGhAvailable(scope.repoRoot))) {
       return;
@@ -76,16 +77,23 @@ export async function startReview(renderer: GithubThreadRenderer): Promise<void>
   if (pick.type === 'workingTree') {
     scope = { type: 'workingTree', baseRef: 'HEAD', repoRoot: root };
   } else {
-    const defBranch = await defaultBranch(root);
-    const branch = await currentBranch(root);
-    if (branch === defBranch) {
-      void vscode.window.showWarningMessage(
-        `You are on ${branch}; branch scope would be empty`
+    try {
+      const defBranch = await defaultBranch(root);
+      const branch = await currentBranch(root);
+      if (branch === defBranch) {
+        void vscode.window.showWarningMessage(
+          `You are on ${branch}; branch scope would be empty`
+        );
+        return;
+      }
+      const base = await mergeBase(root, defBranch);
+      scope = { type: 'branch', baseRef: base, repoRoot: root };
+    } catch (err) {
+      void vscode.window.showErrorMessage(
+        `Revu: could not resolve branch scope: ${(err as Error).message}`
       );
       return;
     }
-    const base = await mergeBase(root, defBranch);
-    scope = { type: 'branch', baseRef: base, repoRoot: root };
   }
 
   setActiveScope(scope);

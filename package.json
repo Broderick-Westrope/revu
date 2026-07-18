@@ -94,7 +94,7 @@
         "revu.agentCommand": {
           "type": "string",
           "default": "claude -p",
-          "description": "Agent CLI command used for guide generation. Receives the prompt on stdin."
+          "description": "Agent CLI command used for guide generation. Receives the prompt on stdin. Split on whitespace; executable paths containing spaces are not supported — use a wrapper script."
         },
         "revu.agentTimeoutSeconds": { "type": "number", "default": 120 }
       }

@@ -59,7 +59,7 @@ export class CommentManager implements vscode.Disposable {
   }
 
   addComment(comment: LocalComment): void {
-    this.store.add(comment);
+    void this.store.add(comment);
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
       return;
@@ -94,7 +94,7 @@ export class CommentManager implements vscode.Disposable {
       text: reply.text,
       createdAt: new Date().toISOString(),
     };
-    this.store.add(comment);
+    await this.store.add(comment);
     thread.comments = [...thread.comments, toVsCodeComment(comment)];
     thread.label = 'Local';
     thread.contextValue = 'revuLocal';
@@ -104,7 +104,7 @@ export class CommentManager implements vscode.Disposable {
   deleteComment(thread: vscode.CommentThread): void {
     for (const [id, tracked] of this.threads) {
       if (tracked === thread) {
-        this.store.remove(id);
+        void this.store.remove(id);
         this.threads.delete(id);
       }
     }
@@ -120,7 +120,7 @@ export class CommentManager implements vscode.Disposable {
     if (confirmation !== 'Delete All') {
       return;
     }
-    this.store.clear();
+    await this.store.clear();
     for (const thread of this.threads.values()) {
       thread.dispose();
     }

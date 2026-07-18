@@ -31,11 +31,14 @@ const STALE_MESSAGE =
 export class GuideTreeProvider implements vscode.TreeDataProvider<GuideNode> {
   private readonly emitter = new vscode.EventEmitter<GuideNode | undefined | void>();
 
+  private changedByPathPromise: Promise<Map<string, ChangedFile>> | undefined;
+
   readonly onDidChangeTreeData: vscode.Event<GuideNode | undefined | void> = this.emitter.event;
 
   constructor(private readonly cache: GuideCache) {}
 
   refresh(): void {
+    this.changedByPathPromise = undefined;
     this.emitter.fire();
   }
 
@@ -121,13 +124,17 @@ export class GuideTreeProvider implements vscode.TreeDataProvider<GuideNode> {
     }
   }
 
-  private async changedByPath(scope: ReviewScope): Promise<Map<string, ChangedFile>> {
-    try {
-      const files = await changedFiles(scope.repoRoot, scope.baseRef, scope.type === 'workingTree');
-      return new Map(files.map((f) => [f.path, f]));
-    } catch {
-      return new Map();
+  private changedByPath(scope: ReviewScope): Promise<Map<string, ChangedFile>> {
+    if (!this.changedByPathPromise) {
+      this.changedByPathPromise = changedFiles(
+        scope.repoRoot,
+        scope.baseRef,
+        scope.type === 'workingTree'
+      )
+        .then((files) => new Map(files.map((f) => [f.path, f])))
+        .catch(() => new Map<string, ChangedFile>());
     }
+    return this.changedByPathPromise;
   }
 }
 

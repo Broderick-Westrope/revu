@@ -15,6 +15,10 @@ const scopeEmitter = new vscode.EventEmitter<ReviewScope | undefined>();
 
 export const onDidChangeScope: vscode.Event<ReviewScope | undefined> = scopeEmitter.event;
 
+export function scopeDisposables(): vscode.Disposable[] {
+  return [scopeEmitter];
+}
+
 export function getActiveScope(): ReviewScope | undefined {
   return activeScope;
 }

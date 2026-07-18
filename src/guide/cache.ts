@@ -7,6 +7,10 @@ const guideEmitter = new vscode.EventEmitter<void>();
 
 export const onDidChangeGuide: vscode.Event<void> = guideEmitter.event;
 
+export function guideDisposables(): vscode.Disposable[] {
+  return [guideEmitter];
+}
+
 export function fireGuideChanged(): void {
   guideEmitter.fire();
 }

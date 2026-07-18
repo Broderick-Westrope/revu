@@ -87,9 +87,54 @@ interface RawResponse {
   };
 }
 
+function splitJsonDocuments(output: string): string[] {
+  const documents: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < output.length; i++) {
+    const ch = output[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      if (depth === 0) {
+        start = i;
+      }
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        documents.push(output.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return documents;
+}
+
 export function parseThreadsResponse(json: string): GhReviewThread[] {
-  const parsed = JSON.parse(json) as RawResponse;
-  const nodes = parsed.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+  let responses: RawResponse[];
+  try {
+    responses = [JSON.parse(json) as RawResponse];
+  } catch {
+    // Older gh versions emit multiple concatenated JSON documents from
+    // `--paginate` instead of one merged document. Split and parse each.
+    responses = splitJsonDocuments(json).map((doc) => JSON.parse(doc) as RawResponse);
+  }
+  const nodes = responses.flatMap(
+    (response) => response.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
+  );
   return nodes.map((node) => ({
     path: node.path,
     line: node.line,

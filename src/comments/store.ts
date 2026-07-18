@@ -14,29 +14,29 @@ export class CommentStore {
     return this.memento.get<LocalComment[]>(STORE_KEY, []);
   }
 
-  add(comment: LocalComment): void {
-    void this.memento.update(STORE_KEY, [...this.all(), comment]);
+  async add(comment: LocalComment): Promise<void> {
+    await this.memento.update(STORE_KEY, [...this.all(), comment]);
     this.emitter.fire();
   }
 
-  update(id: string, text: string): void {
-    void this.memento.update(
+  async update(id: string, text: string): Promise<void> {
+    await this.memento.update(
       STORE_KEY,
       this.all().map((c) => (c.id === id ? { ...c, text } : c))
     );
     this.emitter.fire();
   }
 
-  remove(id: string): void {
-    void this.memento.update(
+  async remove(id: string): Promise<void> {
+    await this.memento.update(
       STORE_KEY,
       this.all().filter((c) => c.id !== id)
     );
     this.emitter.fire();
   }
 
-  clear(): void {
-    void this.memento.update(STORE_KEY, []);
+  async clear(): Promise<void> {
+    await this.memento.update(STORE_KEY, []);
     this.emitter.fire();
   }
 }

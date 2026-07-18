@@ -19,3 +19,5 @@ Guided review and local review comments for AI-assisted workflows, inside VS Cod
 
 - Guide staleness is recomputed on file save and review scope changes. File changes made outside VS Code (e.g. terminal `touch`/`rm`) aren't detected until a save inside the editor or a manual refresh (regenerating the guide or restarting the review).
 - Comment anchors are line-based and may drift when files are edited.
+- `revu.agentCommand` is split on whitespace; executable paths containing spaces are not supported — use a wrapper script.
+- PRs with more than 50 review threads may not fully render on `gh` versions older than 2.33, and threads with more than 50 comments are truncated.

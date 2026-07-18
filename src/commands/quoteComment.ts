@@ -16,7 +16,7 @@ export async function quoteComment(
   const text = await vscode.window.showInputBox({
     prompt: 'Your local comment (the GitHub comment and its code context will be attached)',
   });
-  if (text === undefined) {
+  if (!text) {
     return;
   }
   let startLine = source.range.start.line;
