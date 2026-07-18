@@ -6,6 +6,7 @@ import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { GuideCache } from './guide/cache';
+import { registerGuideTree } from './guide/treeView';
 
 export function activate(context: vscode.ExtensionContext): void {
   const guideCache = new GuideCache(context.workspaceState);
@@ -18,6 +19,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   const store = new CommentStore(context.workspaceState);
   registerComments(context, store);
+  registerGuideTree(context, guideCache);
+  void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
 }
 
 export function deactivate(): void {}

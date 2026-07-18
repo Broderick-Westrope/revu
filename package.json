@@ -19,7 +19,40 @@
       { "command": "revu.copyAllComments", "title": "Revu: Copy All Comments as Markdown" },
       { "command": "revu.copyComment", "title": "Copy as Markdown" }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "revu", "title": "Revu", "icon": "media/revu.svg" }
+      ]
+    },
+    "views": {
+      "revu": [
+        { "id": "revu.guideView", "name": "Review Guide" }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "revu.guideView",
+        "contents": "Start a review to begin.\n[Start Review](command:revu.startReview)",
+        "when": "!revu.reviewActive"
+      },
+      {
+        "view": "revu.guideView",
+        "contents": "No guide yet for this review.\n[Generate a Guide](command:revu.generateGuide)",
+        "when": "revu.reviewActive"
+      }
+    ],
     "menus": {
+      "view/title": [
+        {
+          "command": "revu.generateGuide",
+          "group": "navigation",
+          "when": "view == revu.guideView"
+        },
+        {
+          "command": "revu.startReview",
+          "when": "view == revu.guideView"
+        }
+      ],
       "commandPalette": [
         { "command": "revu.createComment", "when": "false" },
         { "command": "revu.deleteComment", "when": "false" },

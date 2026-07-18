@@ -1,0 +1,21 @@
+# Revu
+
+Guided review and local review comments for AI-assisted workflows, inside VS Code and Cursor.
+
+## Features
+
+- **Review scopes** — review the working tree vs HEAD (including untracked files) or the current branch vs its merge-base with the default branch.
+- **Guided review** — `Revu: Generate Review Guide` shells out to a configured agent CLI (default `claude -p`) and renders themed, ordered file groups with commentary and "pay attention to" notes in the Revu sidebar. Guides are cached per scope and marked stale when the changed-file set drifts; regenerate manually with the same command.
+- **Local review comments** — attach comments to lines or ranges via the native commenting UI, then export everything as AI-friendly markdown to the clipboard.
+
+## Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `revu.agentCommand` | `claude -p` | Agent CLI command used for guide generation; receives the prompt on stdin. |
+| `revu.agentTimeoutSeconds` | `120` | Timeout for guide generation. |
+
+## Known limitations
+
+- Guide staleness is recomputed on file save and review scope changes. File changes made outside VS Code (e.g. terminal `touch`/`rm`) aren't detected until a save inside the editor or a manual refresh (regenerating the guide or restarting the review).
+- Comment anchors are line-based and may drift when files are edited.
