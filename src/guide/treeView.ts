@@ -11,11 +11,6 @@ interface GroupNode {
   group: GuideGroup;
 }
 
-interface NoteNode {
-  kind: 'note';
-  bullet: string;
-}
-
 interface FileNode {
   kind: 'file';
   file: GuideFile;
@@ -23,7 +18,7 @@ interface FileNode {
   repoRoot: string;
 }
 
-export type GuideNode = GroupNode | NoteNode | FileNode;
+export type GuideNode = GroupNode | FileNode;
 
 const STALE_MESSAGE =
   '⚠ Guide is stale — changes differ from when it was generated. Regenerate.';
@@ -56,17 +51,12 @@ export class GuideTreeProvider implements vscode.TreeDataProvider<GuideNode> {
     }
     if (element.kind === 'group') {
       const changedByPath = await this.changedByPath(scope);
-      const notes: GuideNode[] = element.group.attention.map((bullet) => ({
-        kind: 'note',
-        bullet,
-      }));
-      const files: GuideNode[] = element.group.files.map((file) => ({
+      return element.group.files.map((file) => ({
         kind: 'file',
         file,
         changed: changedByPath.get(file.path),
         repoRoot: scope.repoRoot,
       }));
-      return [...notes, ...files];
     }
     return [];
   }
@@ -74,29 +64,10 @@ export class GuideTreeProvider implements vscode.TreeDataProvider<GuideNode> {
   getTreeItem(element: GuideNode): vscode.TreeItem {
     switch (element.kind) {
       case 'group': {
-        const item = new vscode.TreeItem(
+        return new vscode.TreeItem(
           `${element.index + 1}. ${element.group.title}`,
           vscode.TreeItemCollapsibleState.Expanded
         );
-        item.description = element.group.theme;
-        const tooltip = new vscode.MarkdownString();
-        tooltip.appendMarkdown(`**${element.group.title}**\n\n${element.group.theme}`);
-        if (element.group.attention.length > 0) {
-          tooltip.appendMarkdown('\n\n**Pay attention to:**\n');
-          for (const bullet of element.group.attention) {
-            tooltip.appendMarkdown(`\n- ${bullet}`);
-          }
-        }
-        item.tooltip = tooltip;
-        return item;
-      }
-      case 'note': {
-        const item = new vscode.TreeItem(
-          `⚠ ${element.bullet}`,
-          vscode.TreeItemCollapsibleState.None
-        );
-        item.tooltip = element.bullet;
-        return item;
       }
       case 'file': {
         const item = new vscode.TreeItem(
