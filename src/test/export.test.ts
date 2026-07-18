@@ -72,6 +72,50 @@ suite('markdown export', () => {
     assert.strictEqual(renderComment(comment, 2), expected);
   });
 
+  test('renderComment renders a quoted GitHub thread with a realistic multi-line diff hunk', () => {
+    const comment = makeComment({
+      path: 'src/retry.ts',
+      startLine: 10,
+      endLine: 12,
+      languageId: 'ts',
+      codeSnippet: 'for (let i = 0; i < 3; i++) {\n  await attempt();\n}',
+      text: 'I agree, we should fail fast here.',
+      quotedThread: {
+        author: 'alice',
+        body: 'Why retry three times?\nA single attempt seems safer.',
+        path: 'src/retry.ts',
+        line: 11,
+        diffHunk: '@@ -8,4 +8,6 @@ export async function run() {\n context line\n-  await attempt();\n+  for (let i = 0; i < 3; i++) {\n+    await attempt();\n+  }',
+        url: 'https://github.com/acme/widgets/pull/12#discussion_r1',
+      },
+    });
+    const expected = [
+      '### Comment 1 (lines 10-12)',
+      '',
+      '```ts',
+      'for (let i = 0; i < 3; i++) {',
+      '  await attempt();',
+      '}',
+      '```',
+      '',
+      '> **Quoted PR comment** (@alice, on src/retry.ts line 11):',
+      '> Why retry three times?',
+      '> A single attempt seems safer.',
+      '>',
+      '> ```',
+      '> @@ -8,4 +8,6 @@ export async function run() {',
+      '>  context line',
+      '> -  await attempt();',
+      '> +  for (let i = 0; i < 3; i++) {',
+      '> +    await attempt();',
+      '> +  }',
+      '> ```',
+      '',
+      'I agree, we should fail fast here.',
+    ].join('\n');
+    assert.strictEqual(renderComment(comment), expected);
+  });
+
   test('renderComment omits diff hunk sub-block when absent', () => {
     const comment = makeComment({
       startLine: 3,

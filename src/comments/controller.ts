@@ -58,6 +58,23 @@ export class CommentManager implements vscode.Disposable {
     }
   }
 
+  addComment(comment: LocalComment): void {
+    this.store.add(comment);
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      return;
+    }
+    const absolutePath = path.join(folder.uri.fsPath, comment.path);
+    const range = new vscode.Range(comment.startLine - 1, 0, comment.endLine - 1, 0);
+    const thread = this.controller.createCommentThread(vscode.Uri.file(absolutePath), range, [
+      toVsCodeComment(comment),
+    ]);
+    thread.label = 'Local';
+    thread.contextValue = 'revuLocal';
+    thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+    this.threads.set(comment.id, thread);
+  }
+
   async createComment(reply: vscode.CommentReply): Promise<void> {
     const thread = reply.thread;
     const document = await vscode.workspace.openTextDocument(thread.uri);

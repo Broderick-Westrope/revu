@@ -18,7 +18,8 @@
       { "command": "revu.deleteComment", "title": "Delete" },
       { "command": "revu.clearAllComments", "title": "Revu: Clear All Comments" },
       { "command": "revu.copyAllComments", "title": "Revu: Copy All Comments as Markdown" },
-      { "command": "revu.copyComment", "title": "Copy as Markdown" }
+      { "command": "revu.copyComment", "title": "Copy as Markdown" },
+      { "command": "revu.quoteComment", "title": "Quote in local comment" }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -57,7 +58,15 @@
       "commandPalette": [
         { "command": "revu.createComment", "when": "false" },
         { "command": "revu.deleteComment", "when": "false" },
-        { "command": "revu.copyComment", "when": "false" }
+        { "command": "revu.copyComment", "when": "false" },
+        { "command": "revu.quoteComment", "when": "false" }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "revu.quoteComment",
+          "group": "navigation",
+          "when": "commentController == revu-github"
+        }
       ],
       "comments/commentThread/context": [
         {
