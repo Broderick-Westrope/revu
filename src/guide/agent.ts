@@ -2,6 +2,14 @@ import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import { getActiveScope } from '../scope';
 
+export function computeTimeoutSeconds(
+  promptChars: number,
+  baseSeconds: number,
+  maxSeconds: number
+): number {
+  return Math.min(maxSeconds, Math.max(baseSeconds, 60 + promptChars / 1000));
+}
+
 export class AgentError extends Error {
   constructor(message: string, readonly rawOutput: string) {
     super(message);
@@ -11,7 +19,9 @@ export class AgentError extends Error {
 export async function runAgent(prompt: string, token: vscode.CancellationToken): Promise<string> {
   const config = vscode.workspace.getConfiguration('revu');
   const command = config.get<string>('agentCommand', 'claude -p').trim();
-  const timeoutSeconds = config.get<number>('agentTimeoutSeconds', 120);
+  const baseSeconds = config.get<number>('agentTimeoutSeconds', 120);
+  const maxSeconds = config.get<number>('agentTimeoutMaxSeconds', 600);
+  const timeoutSeconds = computeTimeoutSeconds(prompt.length, baseSeconds, maxSeconds);
   if (!command) {
     throw new Error('revu.agentCommand is not configured');
   }
