@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { renderAll, renderComment } from './export';
 import { LocalComment } from './model';
 import { CommentStore } from './store';
 
@@ -134,7 +135,35 @@ export function registerComments(
     vscode.commands.registerCommand('revu.deleteComment', (thread: vscode.CommentThread) =>
       manager.deleteComment(thread)
     ),
-    vscode.commands.registerCommand('revu.clearAllComments', () => manager.clearAllComments())
+    vscode.commands.registerCommand('revu.clearAllComments', () => manager.clearAllComments()),
+    vscode.commands.registerCommand('revu.copyAllComments', async () => {
+      const comments = store.all();
+      if (comments.length === 0) {
+        void vscode.window.showWarningMessage('Revu: no local comments to copy.');
+        return;
+      }
+      await vscode.env.clipboard.writeText(renderAll(comments));
+      const noun = comments.length === 1 ? 'comment' : 'comments';
+      void vscode.window.showInformationMessage(
+        `Revu: copied ${comments.length} ${noun} to the clipboard.`
+      );
+    }),
+    vscode.commands.registerCommand(
+      'revu.copyComment',
+      async (thread: vscode.CommentThread) => {
+        const comments = manager.commentsForThread(thread);
+        const first = comments[0];
+        if (!first) {
+          void vscode.window.showWarningMessage('Revu: no local comment found for this thread.');
+          return;
+        }
+        const rendered = comments.map((c, i) => renderComment(c, i + 1)).join('\n\n');
+        await vscode.env.clipboard.writeText(
+          `# Review comments\n\n## ${first.path}\n\n${rendered}\n`
+        );
+        void vscode.window.showInformationMessage('Revu: comment copied to the clipboard.');
+      }
+    )
   );
   manager.restore();
   return manager;

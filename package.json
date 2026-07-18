@@ -14,12 +14,15 @@
       { "command": "revu.openDiff", "title": "Revu: Open Diff" },
       { "command": "revu.createComment", "title": "Add Local Comment" },
       { "command": "revu.deleteComment", "title": "Delete" },
-      { "command": "revu.clearAllComments", "title": "Revu: Clear All Comments" }
+      { "command": "revu.clearAllComments", "title": "Revu: Clear All Comments" },
+      { "command": "revu.copyAllComments", "title": "Revu: Copy All Comments as Markdown" },
+      { "command": "revu.copyComment", "title": "Copy as Markdown" }
     ],
     "menus": {
       "commandPalette": [
         { "command": "revu.createComment", "when": "false" },
-        { "command": "revu.deleteComment", "when": "false" }
+        { "command": "revu.deleteComment", "when": "false" },
+        { "command": "revu.copyComment", "when": "false" }
       ],
       "comments/commentThread/context": [
         {
@@ -29,6 +32,11 @@
         }
       ],
       "comments/commentThread/title": [
+        {
+          "command": "revu.copyComment",
+          "group": "navigation",
+          "when": "commentThread == revuLocal"
+        },
         {
           "command": "revu.deleteComment",
           "group": "navigation",
