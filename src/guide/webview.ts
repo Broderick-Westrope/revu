@@ -6,6 +6,7 @@ import { changedFiles } from '../git';
 import { getActiveScope, onDidChangeScope, scopeKey } from '../scope';
 import { GuideCache, onDidChangeGuide } from './cache';
 import { Guide } from './model';
+import { parseLineRange, pointAt } from './pointAt';
 
 export function escapeHtml(text: string): string {
   return text
@@ -241,9 +242,18 @@ async function handleMessage(
     await cache.setRead(scopeKey(scope), message.path, true);
     rerender();
   }
+  const cached = cache.get(scopeKey(scope));
+  const note = cached?.guide.groups
+    .flatMap((group) => group.files)
+    .find((file) => file.path === message.path)?.note;
+  const lines = parseLineRange(note);
+  const range = lines
+    ? new vscode.Range(lines.start - 1, 0, lines.end - 1, 0)
+    : undefined;
   const options: vscode.TextDocumentShowOptions = {
     viewColumn: vscode.ViewColumn.Two,
     preview: true,
+    ...(range ? { selection: range } : {}),
   };
   const files = await changedFiles(
     scope.repoRoot,
@@ -251,11 +261,14 @@ async function handleMessage(
     scope.type === 'workingTree'
   ).catch(() => []);
   const changed = files.find((f) => f.path === message.path);
+  const uri = vscode.Uri.file(path.join(scope.repoRoot, message.path));
   if (changed) {
     await showDiff(changed, scope, options);
   } else {
-    const uri = vscode.Uri.file(path.join(scope.repoRoot, message.path));
     await vscode.window.showTextDocument(uri, options);
+  }
+  if (range) {
+    void pointAt(uri, range);
   }
 }
 
