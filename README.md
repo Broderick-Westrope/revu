@@ -2,6 +2,8 @@
 
 Guided code review and local review comments, inside VS Code and Cursor.
 
+![demo](https://raw.githubusercontent.com/Broderick-Westrope/revu/refs/heads/master/media/demo.gif)
+
 ## Why this exists
 
 This is a personal tool built around one specific review flow. AI review is already handled elsewhere: an agent reviews changes in my terminal harness, [anvil](https://github.com/Broderick-Westrope/anvil). But I still want to review changes manually, and that's where the gaps were.
