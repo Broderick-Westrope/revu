@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { Guide } from '../guide/model';
-import { escapeHtml, renderGuideHtml } from '../guide/webview';
+import { escapeHtml, renderGuideHtml, renderInline } from '../guide/webview';
 
 const guide: Guide = {
   summary: 'Overall summary of the change.',
@@ -75,5 +75,27 @@ suite('escapeHtml', () => {
   test('escapes all special characters', () => {
     assert.strictEqual(escapeHtml(`&<>"'`), '&amp;&lt;&gt;&quot;&#39;');
     assert.strictEqual(escapeHtml('plain text'), 'plain text');
+  });
+});
+
+suite('renderInline', () => {
+  test('renders backtick spans as code elements', () => {
+    assert.strictEqual(renderInline('call `foo()` here'), 'call <code>foo()</code> here');
+  });
+
+  test('escapes HTML inside code spans', () => {
+    assert.strictEqual(renderInline('`<script>`'), '<code>&lt;script&gt;</code>');
+  });
+
+  test('leaves an unmatched backtick literal', () => {
+    assert.strictEqual(renderInline('a ` b'), 'a ` b');
+  });
+
+  test('escapes HTML outside code spans', () => {
+    assert.strictEqual(renderInline('<b>`x`</b>'), '&lt;b&gt;<code>x</code>&lt;/b&gt;');
+  });
+
+  test('handles multiple spans non-greedily', () => {
+    assert.strictEqual(renderInline('`a` and `b`'), '<code>a</code> and <code>b</code>');
   });
 });

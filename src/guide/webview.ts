@@ -16,6 +16,10 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
+export function renderInline(text: string): string {
+  return escapeHtml(text).replace(/`([^`]+?)`/g, '<code>$1</code>');
+}
+
 const STYLE = `
   body {
     font-family: var(--vscode-font-family);
@@ -85,6 +89,13 @@ const STYLE = `
   li.file.visited .check {
     visibility: visible;
   }
+  code {
+    font-family: var(--vscode-editor-font-family);
+    background: var(--vscode-textCodeBlock-background);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
   .empty {
     margin-top: 40px;
     text-align: center;
@@ -124,20 +135,20 @@ export function renderGuideHtml(guide: Guide, nonce: string): string {
       const attention =
         group.attention.length > 0
           ? `<ul class="attention">${group.attention
-              .map((bullet) => `<li>${escapeHtml(bullet)}</li>`)
+              .map((bullet) => `<li>${renderInline(bullet)}</li>`)
               .join('')}</ul>`
           : '';
       const files = group.files
         .map((file) => {
-          const note = file.note ? `<span class="note">${escapeHtml(file.note)}</span>` : '';
+          const note = file.note ? `<span class="note">${renderInline(file.note)}</span>` : '';
           return `<li class="file" data-path="${escapeHtml(file.path)}"><span class="path">${escapeHtml(
             file.path
           )}</span>${note}<span class="check">✓</span></li>`;
         })
         .join('');
       return `<section>
-<h2>${i + 1}. ${escapeHtml(group.title)}</h2>
-<p class="theme">${escapeHtml(group.theme)}</p>
+<h2>${i + 1}. ${renderInline(group.title)}</h2>
+<p class="theme">${renderInline(group.theme)}</p>
 ${attention}
 <ul class="files">${files}</ul>
 </section>`;
@@ -145,7 +156,7 @@ ${attention}
     .join('\n');
 
   const body = `<h1>Review Guide</h1>
-<p class="summary">${escapeHtml(guide.summary)}</p>
+<p class="summary">${renderInline(guide.summary)}</p>
 ${sections}`;
 
   const script = `
