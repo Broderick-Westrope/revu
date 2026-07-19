@@ -1,13 +1,23 @@
 import { ChangedFile } from '../git';
 
-const MAX_LINES_PER_FILE = 400;
-const MAX_PROMPT_CHARS = 150000;
+export const MAX_PROMPT_CHARS = 150000;
 
-const INSTRUCTIONS = `You are generating a code review guide for a set of changed files.
+const PREAMBLE =
+  'You are generating a code review guide. Review the changed files and diff below, then follow the instructions at the end.';
 
-Group related changed files by theme: keep generated code together, keep related tests together, and keep one functional unit per group. Order the groups so the core functional changes come first and low-signal changes (generated files, lockfiles) come last. For each group provide a short title, a one-line theme describing what the group is about, and "pay attention to" bullets highlighting risky or noteworthy aspects. Every changed file must appear in exactly one group.
+const INSTRUCTIONS = `<instructions>
+Group the changed files into a review guide:
+- Group files by functional theme. Put the core behavioral change first, then the consumers and consequences of that change. Group tests with the implementation they cover, not in a separate tests bucket, unless the change is test-only. Put mechanical changes (generated code, lockfiles, formatting-only changes, config churn) last.
+- Use only paths from <file_list>. Every listed file must appear in exactly one group. Do not invent paths.
+- Files with status R are renames; treat their content as moved, not new, unless the diff shows modifications beyond the move.
+- Attention notes must reference something concrete and visible in the diff, with a specific scenario or risk. Never write generic advice like "ensure correctness", "verify behavior", or "check for bugs". Maximum 3 attention bullets per group. An empty attention array is better than filler.
+- When a per-file note refers to specific lines, start it with "Lines X-Y: " or "Line N: " using new-file line numbers.
+- Files marked truncated="true" had their diffs omitted for size; group them using the file list and their role, and do not fabricate details about their contents.
+- First, inside <analysis> tags, briefly list the themes you see and assign each file to one (a few lines, not exhaustive). Then output the JSON object. The JSON must be the only content after the closing </analysis> tag.
+</instructions>`;
 
-Respond with only a JSON object matching this schema, and nothing else:
+const SCHEMA = `<schema>
+The JSON object must match this schema:
 
 {
   "summary": "1-3 sentence overview of the whole change",
@@ -21,14 +31,47 @@ Respond with only a JSON object matching this schema, and nothing else:
       ]
     }
   ]
-}`;
+}
+
+Example output shape:
+
+{
+  "summary": "Extracts retry handling into a shared helper and updates its callers.",
+  "groups": [
+    {
+      "title": "Retry helper extraction",
+      "theme": "Core behavioral change: retry logic moved into a reusable helper",
+      "attention": ["Lines 12-30: the backoff loop now caps at 5 attempts where the old inline version retried forever"],
+      "files": [
+        { "path": "src/retry.ts", "note": "Lines 12-30: new withRetry helper" },
+        { "path": "src/retry.test.ts", "note": "Covers the new attempt cap" }
+      ]
+    },
+    {
+      "title": "Mechanical updates",
+      "theme": "Lockfile churn from the dependency bump",
+      "attention": [],
+      "files": [
+        { "path": "package-lock.json" }
+      ]
+    }
+  ]
+}
+</schema>`;
 
 interface DiffSection {
   header: string;
   body: string;
+  path?: string;
+  truncated: boolean;
 }
 
-function splitDiff(diff: string): DiffSection[] {
+function headerPath(header: string): string | undefined {
+  const match = /^diff --git (?:"?a\/.*?"?) "?b\/(.*?)"?$/.exec(header);
+  return match ? match[1] : undefined;
+}
+
+export function splitDiff(diff: string): DiffSection[] {
   const sections: DiffSection[] = [];
   const parts = diff.split(/^(?=diff --git )/m);
   for (const part of parts) {
@@ -36,56 +79,54 @@ function splitDiff(diff: string): DiffSection[] {
       continue;
     }
     const newlineIndex = part.indexOf('\n');
-    if (newlineIndex === -1) {
-      sections.push({ header: part, body: '' });
-    } else {
-      sections.push({ header: part.slice(0, newlineIndex), body: part.slice(newlineIndex + 1) });
-    }
+    const header = newlineIndex === -1 ? part : part.slice(0, newlineIndex);
+    const body = newlineIndex === -1 ? '' : part.slice(newlineIndex + 1);
+    sections.push({ header, body, path: headerPath(header), truncated: false });
   }
   return sections;
 }
 
-function truncateBody(body: string): string {
-  const lines = body.split('\n');
-  if (lines.length <= MAX_LINES_PER_FILE) {
-    return body;
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function renderFileElement(section: DiffSection, status: string | undefined): string {
+  const attrs = [`path="${escapeAttr(section.path ?? '')}"`];
+  if (status) {
+    attrs.push(`status="${escapeAttr(status)}"`);
   }
-  const kept = lines.slice(0, MAX_LINES_PER_FILE);
-  const dropped = lines.length - MAX_LINES_PER_FILE;
-  return kept.join('\n') + `\n[... truncated ${dropped} lines]`;
+  attrs.push(`truncated="${section.truncated}"`);
+  if (section.truncated) {
+    return `<file ${attrs.join(' ')} />`;
+  }
+  const content = section.body ? `${section.header}\n${section.body}` : section.header;
+  return `<file ${attrs.join(' ')}>\n${content}\n</file>`;
 }
 
 function fileListSection(files: ChangedFile[]): string {
   const lines = files.map((f) =>
     f.status === 'R' ? `${f.status}\t${f.oldPath ?? ''} -> ${f.path}` : `${f.status}\t${f.path}`
   );
-  return `## Changed files (name-status)\n\n${lines.join('\n')}`;
-}
-
-function assemble(instructions: string, prSection: string, fileList: string, diffSection: string): string {
-  const parts = [instructions];
-  if (prSection) {
-    parts.push(prSection);
-  }
-  parts.push(fileList, diffSection);
-  return parts.join('\n\n');
+  return `<file_list>\n${lines.join('\n')}\n</file_list>`;
 }
 
 export function buildPrompt(files: ChangedFile[], diff: string, prContext?: string): string {
-  const prSection = prContext ? `## Pull request context\n\n${prContext}` : '';
-  const fileList = fileListSection(files);
-  const sections = splitDiff(diff).map((s) => ({
-    header: s.header,
-    body: truncateBody(s.body),
-  }));
+  const statusByPath = new Map(files.map((f) => [f.path, f.status]));
+  const sections = splitDiff(diff);
 
-  const render = (): string =>
-    assemble(
-      INSTRUCTIONS,
-      prSection,
-      fileList,
-      `## Unified diff\n\n${sections.map((s) => (s.body ? `${s.header}\n${s.body}` : s.header)).join('\n')}`
+  const render = (): string => {
+    const parts = [PREAMBLE];
+    if (prContext) {
+      parts.push(`<pull_request>\n${prContext}\n</pull_request>`);
+    }
+    parts.push(fileListSection(files));
+    const fileElements = sections.map((s) =>
+      renderFileElement(s, s.path ? statusByPath.get(s.path) : undefined)
     );
+    parts.push(`<diff>\n${fileElements.join('\n')}\n</diff>`);
+    parts.push(INSTRUCTIONS, SCHEMA);
+    return parts.join('\n\n');
+  };
 
   let prompt = render();
   if (prompt.length <= MAX_PROMPT_CHARS) {
@@ -99,10 +140,11 @@ export function buildPrompt(files: ChangedFile[], diff: string, prContext?: stri
     if (prompt.length <= MAX_PROMPT_CHARS) {
       break;
     }
-    if (!sections[index].body) {
+    if (sections[index].truncated) {
       continue;
     }
-    sections[index].body = '[diff omitted for size]';
+    sections[index].truncated = true;
+    sections[index].body = '';
     prompt = render();
   }
   return prompt;

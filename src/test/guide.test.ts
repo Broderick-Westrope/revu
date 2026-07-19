@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { ChangedFile } from '../git';
 import { Guide, parseGuide } from '../guide/model';
-import { buildPrompt } from '../guide/prompt';
+import { buildPrompt, MAX_PROMPT_CHARS } from '../guide/prompt';
 
 function makeDiffSection(path: string, bodyLines: number): string {
   const lines = [
@@ -34,26 +34,42 @@ suite('guide prompt builder', () => {
     { path: 'src/b.ts', status: 'A' },
   ];
 
-  test('includes name-status list and full diff when under limits', () => {
+  test('includes file_list and diff sections with full diff when under limits', () => {
     const diff = [makeDiffSection('src/a.ts', 10), makeDiffSection('src/b.ts', 10)].join('\n');
     const prompt = buildPrompt(files, diff);
+    assert.ok(prompt.includes('<file_list>'));
+    assert.ok(prompt.includes('</file_list>'));
+    assert.ok(prompt.includes('<diff>'));
+    assert.ok(prompt.includes('</diff>'));
     assert.ok(prompt.includes('M\tsrc/a.ts'));
     assert.ok(prompt.includes('A\tsrc/b.ts'));
+    assert.ok(prompt.includes('<file path="src/a.ts" status="M" truncated="false">'));
+    assert.ok(prompt.includes('<file path="src/b.ts" status="A" truncated="false">'));
     assert.ok(prompt.includes('diff --git a/src/a.ts b/src/a.ts'));
     assert.ok(prompt.includes('line 5 of src/b.ts'));
-    assert.ok(!prompt.includes('truncated'));
-    assert.ok(!prompt.includes('[diff omitted for size]'));
+    assert.doesNotMatch(prompt, /<file [^>]*truncated="true"/);
   });
 
-  test('truncates per-file diffs beyond 400 lines with a marker', () => {
-    const diff = makeDiffSection('src/a.ts', 1000);
+  test('places instructions and schema after the diff', () => {
+    const diff = makeDiffSection('src/a.ts', 10);
     const prompt = buildPrompt([files[0]], diff);
-    assert.match(prompt, /\[\.\.\. truncated \d+ lines\]/);
-    assert.ok(!prompt.includes('line 900 of src/a.ts'));
-    assert.ok(prompt.includes('line 100 of src/a.ts'));
+    const diffEnd = prompt.indexOf('</diff>');
+    const instructions = prompt.indexOf('<instructions>');
+    const schema = prompt.indexOf('<schema>');
+    assert.ok(diffEnd !== -1);
+    assert.ok(instructions > diffEnd);
+    assert.ok(schema > instructions);
   });
 
-  test('drops largest diff bodies first when over the total character cap', () => {
+  test('keeps long per-file diffs intact when under the total cap', () => {
+    const diff = makeDiffSection('src/a.ts', 500);
+    const prompt = buildPrompt([files[0]], diff);
+    assert.ok(prompt.includes('line 490 of src/a.ts'));
+    assert.doesNotMatch(prompt, /<file [^>]*truncated="true"/);
+    assert.ok(!prompt.includes('[... truncated'));
+  });
+
+  test('drops whole largest diff bodies first when over the total character cap', () => {
     const manyFiles: ChangedFile[] = [];
     const sections: string[] = [];
     for (let i = 0; i < 20; i++) {
@@ -64,19 +80,20 @@ suite('guide prompt builder', () => {
     manyFiles.push({ path: 'src/small.ts', status: 'M' });
     sections.push(makeDiffSection('src/small.ts', 10));
     const prompt = buildPrompt(manyFiles, sections.join('\n'));
-    assert.ok(prompt.length <= 150000 + 1000);
-    assert.ok(prompt.includes('[diff omitted for size]'));
+    assert.ok(prompt.length <= MAX_PROMPT_CHARS + 1000);
+    assert.match(prompt, /<file path="src\/big-\d+\.ts" status="M" truncated="true" \/>/);
     assert.ok(prompt.includes('M\tsrc/big-0.ts'));
+    assert.ok(prompt.includes('<file path="src/small.ts" status="M" truncated="false">'));
     assert.ok(prompt.includes('line 5 of src/small.ts'));
   });
 
-  test('includes PR context section only when provided', () => {
+  test('includes pull_request section only when provided', () => {
     const diff = makeDiffSection('src/a.ts', 10);
     const withPr = buildPrompt([files[0]], diff, 'Title: Fix auth');
-    assert.ok(withPr.includes('## Pull request context'));
+    assert.ok(withPr.includes('<pull_request>'));
     assert.ok(withPr.includes('Title: Fix auth'));
     const withoutPr = buildPrompt([files[0]], diff);
-    assert.ok(!withoutPr.includes('## Pull request context'));
+    assert.ok(!withoutPr.includes('<pull_request>'));
   });
 });
 
