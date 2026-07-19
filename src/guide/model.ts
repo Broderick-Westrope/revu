@@ -108,6 +108,34 @@ function validateGuide(value: unknown): Guide {
   return { summary: obj.summary, groups };
 }
 
+export function reconcileGuide(guide: Guide, changedPaths: string[]): Guide {
+  const allowed = new Set(changedPaths);
+  const seen = new Set<string>();
+  const groups: GuideGroup[] = [];
+  for (const group of guide.groups) {
+    const files = group.files.filter((f) => {
+      if (!allowed.has(f.path) || seen.has(f.path)) {
+        return false;
+      }
+      seen.add(f.path);
+      return true;
+    });
+    if (files.length > 0) {
+      groups.push({ ...group, files });
+    }
+  }
+  const missing = changedPaths.filter((p) => !seen.has(p));
+  if (missing.length > 0) {
+    groups.push({
+      title: 'Other changes',
+      theme: 'Files not classified by the guide generator',
+      attention: [],
+      files: missing.map((path) => ({ path })),
+    });
+  }
+  return { summary: guide.summary, groups };
+}
+
 export function parseGuide(raw: string): Guide {
   const candidate = extractFencedJson(raw) ?? extractBalancedJson(raw);
   if (!candidate) {

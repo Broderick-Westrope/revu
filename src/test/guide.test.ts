@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { ChangedFile } from '../git';
-import { Guide, parseGuide } from '../guide/model';
+import { Guide, parseGuide, reconcileGuide } from '../guide/model';
 import { buildPrompt, MAX_PROMPT_CHARS } from '../guide/prompt';
 
 function makeDiffSection(path: string, bodyLines: number): string {
@@ -131,6 +131,13 @@ suite('parseGuide', () => {
     assert.strictEqual(guide.summary, 'Uses ${interpolation} and } braces { in text');
   });
 
+  test('parses JSON following an <analysis> preamble', () => {
+    const raw = `<analysis>\nTheme 1: auth refactor -> src/auth.ts, src/auth.test.ts\n</analysis>\n${json}`;
+    const guide = parseGuide(raw);
+    assert.strictEqual(guide.summary, validGuide.summary);
+    assert.strictEqual(guide.groups[0].title, 'Auth service refactor');
+  });
+
   test('throws on garbage input', () => {
     assert.throws(() => parseGuide('no json here at all'), /No JSON object found/);
     assert.throws(() => parseGuide('{"summary": "x", "groups": []}'), /groups/);
@@ -142,5 +149,86 @@ suite('parseGuide', () => {
       /at least one file/
     );
     assert.throws(() => parseGuide('{"broken": '), /No JSON object found|not valid JSON/);
+  });
+});
+
+suite('reconcileGuide', () => {
+  const changedPaths = ['src/auth.ts', 'src/auth.test.ts', 'src/util.ts'];
+
+  function guideWith(groups: Guide['groups']): Guide {
+    return { summary: 'sum', groups };
+  }
+
+  test('is a no-op on a well-formed guide', () => {
+    const guide = guideWith([
+      {
+        title: 'Auth',
+        theme: 'auth changes',
+        attention: [],
+        files: [{ path: 'src/auth.ts' }, { path: 'src/auth.test.ts' }],
+      },
+      { title: 'Util', theme: 'util changes', attention: [], files: [{ path: 'src/util.ts' }] },
+    ]);
+    assert.deepStrictEqual(reconcileGuide(guide, changedPaths), guide);
+  });
+
+  test('drops invented paths and drops groups left empty', () => {
+    const guide = guideWith([
+      {
+        title: 'Auth',
+        theme: 'auth changes',
+        attention: [],
+        files: [
+          { path: 'src/auth.ts' },
+          { path: 'src/auth.test.ts' },
+          { path: 'src/util.ts' },
+          { path: 'src/invented.ts' },
+        ],
+      },
+      { title: 'Ghost', theme: 'nothing real', attention: [], files: [{ path: 'src/fake.ts' }] },
+    ]);
+    const result = reconcileGuide(guide, changedPaths);
+    assert.strictEqual(result.groups.length, 1);
+    assert.deepStrictEqual(
+      result.groups[0].files.map((f) => f.path),
+      changedPaths
+    );
+  });
+
+  test('appends missing paths in an Other changes group', () => {
+    const guide = guideWith([
+      { title: 'Auth', theme: 'auth changes', attention: [], files: [{ path: 'src/auth.ts' }] },
+    ]);
+    const result = reconcileGuide(guide, changedPaths);
+    assert.strictEqual(result.groups.length, 2);
+    const other = result.groups[1];
+    assert.strictEqual(other.title, 'Other changes');
+    assert.strictEqual(other.theme, 'Files not classified by the guide generator');
+    assert.deepStrictEqual(other.attention, []);
+    assert.deepStrictEqual(other.files, [{ path: 'src/auth.test.ts' }, { path: 'src/util.ts' }]);
+  });
+
+  test('keeps only the first occurrence of duplicated paths', () => {
+    const guide = guideWith([
+      {
+        title: 'Auth',
+        theme: 'auth changes',
+        attention: [],
+        files: [{ path: 'src/auth.ts', note: 'first' }, { path: 'src/util.ts' }],
+      },
+      {
+        title: 'Dupes',
+        theme: 'repeats',
+        attention: [],
+        files: [{ path: 'src/auth.ts', note: 'second' }],
+      },
+      { title: 'Tests', theme: 'test changes', attention: [], files: [{ path: 'src/auth.test.ts' }] },
+    ]);
+    const result = reconcileGuide(guide, changedPaths);
+    assert.deepStrictEqual(
+      result.groups.map((g) => g.title),
+      ['Auth', 'Tests']
+    );
+    assert.strictEqual(result.groups[0].files[0].note, 'first');
   });
 });

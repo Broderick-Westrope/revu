@@ -3,7 +3,7 @@ import { changedFiles, diffText, nameStatusHash } from '../git';
 import { getActiveScope, getPrContext, scopeKey } from '../scope';
 import { runAgent, AgentError } from '../guide/agent';
 import { fireGuideChanged, GuideCache } from '../guide/cache';
-import { parseGuide } from '../guide/model';
+import { parseGuide, reconcileGuide } from '../guide/model';
 import { buildPrompt } from '../guide/prompt';
 
 export async function generateGuide(cache: GuideCache): Promise<void> {
@@ -40,7 +40,10 @@ export async function generateGuide(cache: GuideCache): Promise<void> {
       },
       (_progress, token) => runAgent(prompt, token)
     );
-    const guide = parseGuide(raw);
+    const guide = reconcileGuide(
+      parseGuide(raw),
+      files.map((f) => f.path)
+    );
     const hash = await nameStatusHash(scope.repoRoot, scope.baseRef, includeUntracked);
     await cache.put({
       guide,
