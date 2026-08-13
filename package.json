@@ -70,6 +70,24 @@
       {
         "command": "revu.quoteComment",
         "title": "Quote in local comment"
+      },
+      {
+        "command": "revu.refreshCheckpoint",
+        "title": "Revu: Refresh Checkpoint View",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "revu.markSafe",
+        "title": "Mark Safe",
+        "icon": "$(check)"
+      },
+      {
+        "command": "revu.setCheckpoint",
+        "title": "Revu: Set Checkpoint"
+      },
+      {
+        "command": "revu.removeCheckpoint",
+        "title": "Revu: Remove Checkpoint"
       }
     ],
     "viewsContainers": {
@@ -86,6 +104,10 @@
         {
           "id": "revu.guideView",
           "name": "Review Guide"
+        },
+        {
+          "id": "revu.checkpointView",
+          "name": "Checkpoint"
         }
       ]
     },
@@ -99,6 +121,11 @@
         "view": "revu.guideView",
         "contents": "No guide yet for this review.\n[Generate a Guide](command:revu.generateGuide)",
         "when": "revu.reviewActive"
+      },
+      {
+        "view": "revu.checkpointView",
+        "contents": "Open a git repository to use checkpoints.",
+        "when": "!revu.isGitRepo"
       }
     ],
     "menus": {
@@ -116,6 +143,18 @@
         {
           "command": "revu.startReview",
           "when": "view == revu.guideView"
+        },
+        {
+          "command": "revu.refreshCheckpoint",
+          "group": "navigation",
+          "when": "view == revu.checkpointView"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "revu.markSafe",
+          "group": "inline",
+          "when": "view == revu.checkpointView && viewItem == revu.commit"
         }
       ],
       "commandPalette": [
@@ -133,6 +172,10 @@
         },
         {
           "command": "revu.quoteComment",
+          "when": "false"
+        },
+        {
+          "command": "revu.markSafe",
           "when": "false"
         }
       ],

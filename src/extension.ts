@@ -5,6 +5,7 @@ import { generateGuide } from './commands/generateGuide';
 import { quoteComment } from './commands/quoteComment';
 import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
+import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
 import { repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { registerGitWatcher } from './gitWatcher';
@@ -19,6 +20,8 @@ let gitStateEvent: vscode.Event<void> | undefined;
 export function onDidChangeGitState(): vscode.Event<void> | undefined {
   return gitStateEvent;
 }
+
+let checkpointProvider: CheckpointTreeProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const guideCache = new GuideCache(context.workspaceState);
@@ -43,19 +46,29 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   registerGuideTree(context, guideCache);
   registerGuideWebview(context, guideCache);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('revu.refreshCheckpoint', () => checkpointProvider?.refresh()),
+    vscode.commands.registerCommand('revu.markSafe', () => {}),
+    vscode.commands.registerCommand('revu.setCheckpoint', () => {}),
+    vscode.commands.registerCommand('revu.removeCheckpoint', () => {})
+  );
   void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
   void (async () => {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
+      void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', false);
       return;
     }
     let root: string;
     try {
       root = await repoRoot(folder.uri.fsPath);
     } catch {
+      void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', false);
       return;
     }
+    void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', true);
     gitStateEvent = registerGitWatcher(context, root);
+    checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
   })();
 }
 
