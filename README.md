@@ -25,12 +25,16 @@ Revu is those three ideas rebuilt as one extension, in the editor where the revi
 
 ## How it works
 
-1. **Start a review** — `Revu: Start Review`, pick a scope: working tree vs HEAD (untracked files included) or current branch vs merge-base with the default branch. No push or PR needed for your own work. If the branch does have an open PR, Revu fetches its metadata and review threads via `gh`.
+1. **Start a review** — `Revu: Start Review`, pick a scope: working tree vs HEAD (untracked files included), current branch vs merge-base with the default branch, or since checkpoint — everything after the last commit you marked as reviewed on this branch. No push or PR needed for your own work. If the branch does have an open PR, Revu fetches its metadata and review threads via `gh`.
 2. **Generate a guide** — `Revu: Generate Review Guide` sends the diff to your agent CLI (default `claude -p`) and opens the guide in an editor tab: overall summary, themed sections in suggested review order, attention notes, and clickable file rows. Files open as native diffs in the adjacent editor group, jumping straight to the lines the note references. Mark files read as you go. The sidebar tree mirrors the sections for quick navigation.
 3. **Leave comments** — use the native commenting UI (the `+` in the gutter) on any line or range. Comments persist per workspace and never leave your machine. Existing GitHub threads render inline read-only, and you can quote one into a local comment when you want to discuss someone's feedback with the agent.
 4. **Hand off to the agent** — `Revu: Copy All Comments` puts the full set on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads, your notes. Paste it into your preferred agent ([anvil](https://github.com/Broderick-Westrope/anvil) for me) and work through it together.
 
 Guides are cached per scope and flagged stale when the changed-file set drifts, so reopening a review is instant.
+
+### Checkpoints
+
+The Checkpoint view in the Revu sidebar tracks what you've already reviewed on the current branch. It lists the unreviewed commits since the checkpoint (a per-branch ref, defaulting to the merge-base with the default branch) plus all unreviewed changes against the working tree. Marking a commit safe (the check action on a commit row) advances the checkpoint past it. `Revu: Set Checkpoint` picks an arbitrary commit; `Revu: Remove Checkpoint` falls back to the merge-base. When reading a commit diff you can jump to how that file looks now via `Revu: Compare with Working Tree` (editor title or the commit file's context menu) — useful when a later commit already reworked the code you're reading.
 
 ## Read-only by design
 
@@ -44,17 +48,21 @@ Revu never writes to GitHub. No replies, no review submission, no mutations of a
 
 ## Commands
 
-| Command                       | What it does                                                |
-| ----------------------------- | ----------------------------------------------------------- |
-| `Revu: Start Review`          | Pick a scope and begin a review session.                    |
-| `Revu: End Review`            | Clear the session and any rendered PR threads.              |
-| `Revu: Generate Review Guide` | Generate (or regenerate) the guide for the active scope.    |
-| `Revu: Open Guide`            | Open the guide panel for the cached guide.                  |
-| `Revu: Refresh PR Threads`    | Re-fetch GitHub review threads for the current branch's PR. |
-| `Revu: Copy All Comments`     | Export every local comment as markdown to the clipboard.    |
-| `Revu: Clear All Comments`    | Delete all local comments (with confirmation).              |
+| Command                          | What it does                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| `Revu: Start Review`             | Pick a scope and begin a review session.                                                |
+| `Revu: End Review`               | Clear the session and any rendered PR threads.                                          |
+| `Revu: Generate Review Guide`    | Generate (or regenerate) the guide for the active scope.                                |
+| `Revu: Open Guide`               | Open the guide panel for the cached guide.                                              |
+| `Revu: Refresh PR Threads`       | Re-fetch GitHub review threads for the current branch's PR.                             |
+| `Revu: Copy All Comments`        | Export every local comment as markdown to the clipboard.                                |
+| `Revu: Clear All Comments`       | Delete all local comments (with confirmation).                                          |
+| `Revu: Set Checkpoint`           | Pick the commit everything up to which counts as reviewed on this branch.               |
+| `Revu: Remove Checkpoint`        | Delete the branch's checkpoint ref; unreviewed state falls back to the merge-base.      |
+| `Revu: Refresh Checkpoint View`  | Manually re-read git state for the Checkpoint view.                                     |
+| `Revu: Compare with Working Tree`| From a commit diff, show the same file against the current working tree.                |
 
-Per-thread actions (copy one comment, delete, quote a GitHub comment) live on the comment thread's title bar.
+Per-thread actions (copy one comment, delete, quote a GitHub comment) live on the comment thread's title bar. Marking a commit safe is an inline action on commit rows in the Checkpoint view.
 
 ## Settings
 
@@ -67,7 +75,7 @@ Per-thread actions (copy one comment, delete, quote a GitHub comment) live on th
 
 ## Known limitations
 
-- Guide staleness is recomputed on file save and review scope changes. File changes made outside VS Code (e.g. terminal `touch`/`rm`) aren't detected until a save inside the editor or a manual refresh (regenerating the guide or restarting the review).
+- Guide staleness is recomputed on file save, review scope changes, and git ref changes (a watcher on the git reflog catches commits, rebases, and checkouts made in a terminal). Non-git file changes made outside VS Code (e.g. terminal `touch`/`rm`) aren't detected until a save inside the editor or a manual refresh (regenerating the guide or restarting the review).
 - Comment anchors are line-based and may drift when files are edited. GitHub PR threads are anchored naively to their recorded lines, so they can be misplaced if your working tree has drifted from the PR head; each thread carries its diff hunk so the context survives either way.
 - `revu.agentCommand` is split on whitespace; executable paths containing spaces are not supported. Use a wrapper script.
 - PRs with more than 50 review threads may not fully render on `gh` versions older than 2.33, and threads with more than 50 comments are truncated.
