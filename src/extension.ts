@@ -5,12 +5,20 @@ import { generateGuide } from './commands/generateGuide';
 import { quoteComment } from './commands/quoteComment';
 import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
+import { repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
+import { registerGitWatcher } from './gitWatcher';
 import { GithubThreadRenderer } from './github/threadRenderer';
 import { GuideCache, guideDisposables } from './guide/cache';
 import { registerGuideTree } from './guide/treeView';
 import { registerGuideWebview } from './guide/webview';
 import { scopeDisposables } from './scope';
+
+let gitStateEvent: vscode.Event<void> | undefined;
+
+export function onDidChangeGitState(): vscode.Event<void> | undefined {
+  return gitStateEvent;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const guideCache = new GuideCache(context.workspaceState);
@@ -36,6 +44,19 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGuideTree(context, guideCache);
   registerGuideWebview(context, guideCache);
   void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
+  void (async () => {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      return;
+    }
+    let root: string;
+    try {
+      root = await repoRoot(folder.uri.fsPath);
+    } catch {
+      return;
+    }
+    gitStateEvent = registerGitWatcher(context, root);
+  })();
 }
 
 export function deactivate(): void {}
