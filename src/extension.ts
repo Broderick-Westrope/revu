@@ -57,7 +57,7 @@ export function activate(context: vscode.ExtensionContext): void {
       quoteComment(manager, comment)
     )
   );
-  registerGuideTree(context, guideCache);
+  const guideStalenessRefresh = registerGuideTree(context, guideCache);
   registerGuideWebview(context, guideCache);
   context.subscriptions.push(
     vscode.commands.registerCommand('revu.refreshCheckpoint', () => checkpointProvider?.refresh()),
@@ -94,6 +94,7 @@ export function activate(context: vscode.ExtensionContext): void {
     gitStateEvent = registerGitWatcher(context, root);
     checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
     registerCheckpointGuard(context, root, gitStateEvent);
+    context.subscriptions.push(gitStateEvent(guideStalenessRefresh));
   })();
 }
 

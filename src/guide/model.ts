@@ -20,6 +20,7 @@ export interface CachedGuide {
   scopeKey: string;
   hash: string;
   generatedAt: string;
+  baseSha?: string;
 }
 
 function extractFencedJson(raw: string): string | undefined {

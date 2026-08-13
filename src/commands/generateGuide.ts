@@ -50,6 +50,7 @@ export async function generateGuide(cache: GuideCache): Promise<void> {
       scopeKey: scopeKey(scope),
       hash,
       generatedAt: new Date().toISOString(),
+      baseSha: scope.type === 'workingTree' ? undefined : scope.baseRef,
     });
     fireGuideChanged();
     await vscode.commands.executeCommand('revu.openGuide');

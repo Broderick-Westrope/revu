@@ -46,7 +46,14 @@ export class GuideCache {
     await this.memento.update(READ_PREFIX + scopeKey, next.length > 0 ? next : undefined);
   }
 
-  isStale(cached: CachedGuide, currentHash: string): boolean {
-    return cached.hash !== currentHash;
+  isStale(cached: CachedGuide, currentHash: string, currentBaseSha?: string): boolean {
+    if (cached.hash !== currentHash) {
+      return true;
+    }
+    return (
+      cached.baseSha !== undefined &&
+      currentBaseSha !== undefined &&
+      cached.baseSha !== currentBaseSha
+    );
   }
 }

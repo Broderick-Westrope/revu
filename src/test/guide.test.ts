@@ -1,6 +1,13 @@
 import * as assert from 'assert';
-import { ChangedFile } from '../git';
-import { Guide, parseGuide, reconcileGuide } from '../guide/model';
+import { execFile } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as vscode from 'vscode';
+import { markSafe } from '../checkpoint';
+import { ChangedFile, nameStatusHash } from '../git';
+import { GuideCache } from '../guide/cache';
+import { CachedGuide, Guide, parseGuide, reconcileGuide } from '../guide/model';
 import { buildPrompt, MAX_PROMPT_CHARS } from '../guide/prompt';
 
 function makeDiffSection(path: string, bodyLines: number): string {
@@ -230,5 +237,108 @@ suite('reconcileGuide', () => {
       ['Auth', 'Tests']
     );
     assert.strictEqual(result.groups[0].files[0].note, 'first');
+  });
+});
+
+function makeMemento(): vscode.Memento {
+  const store = new Map<string, unknown>();
+  return {
+    keys: () => [...store.keys()],
+    get: <T>(key: string, defaultValue?: T): T | undefined =>
+      store.has(key) ? (store.get(key) as T) : defaultValue,
+    update: async (key: string, value: unknown): Promise<void> => {
+      if (value === undefined) {
+        store.delete(key);
+      } else {
+        store.set(key, value);
+      }
+    },
+  } as vscode.Memento;
+}
+
+function runGit(cwd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd }, (err, stdout) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
+suite('guide staleness', () => {
+  const repos: string[] = [];
+
+  async function makeRepo(): Promise<string> {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'revu-guide-stale-test-'));
+    repos.push(repo);
+    await runGit(repo, ['init', '-b', 'main']);
+    await runGit(repo, ['config', 'user.email', 'test@example.com']);
+    await runGit(repo, ['config', 'user.name', 'Test User']);
+    fs.writeFileSync(path.join(repo, 'foo.ts'), 'original\n');
+    await runGit(repo, ['add', '.']);
+    await runGit(repo, ['commit', '-m', 'A']);
+    return repo;
+  }
+
+  async function commitFoo(repo: string, content: string, message: string): Promise<string> {
+    fs.writeFileSync(path.join(repo, 'foo.ts'), content);
+    await runGit(repo, ['add', 'foo.ts']);
+    await runGit(repo, ['commit', '-m', message]);
+    return (await runGit(repo, ['rev-parse', 'HEAD'])).trim();
+  }
+
+  function cachedGuide(hash: string, baseSha?: string): CachedGuide {
+    return {
+      guide: validGuide,
+      scopeKey: 'checkpoint:feature',
+      hash,
+      generatedAt: new Date().toISOString(),
+      baseSha,
+    };
+  }
+
+  suiteTeardown(() => {
+    for (const repo of repos) {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('advancing the checkpoint flags the guide stale despite an unchanged file set', async () => {
+    const repo = await makeRepo();
+    const a = (await runGit(repo, ['rev-parse', 'HEAD'])).trim();
+    await runGit(repo, ['checkout', '-b', 'feature']);
+    const b = await commitFoo(repo, 'change B\n', 'B');
+    await commitFoo(repo, 'change C\n', 'C');
+    await markSafe(repo, 'feature', a);
+    const cache = new GuideCache(makeMemento());
+    const hashAtA = await nameStatusHash(repo, a, true);
+    const cached = cachedGuide(hashAtA, a);
+    await markSafe(repo, 'feature', b, a);
+    const hashAtB = await nameStatusHash(repo, b, true);
+    assert.strictEqual(hashAtB, hashAtA);
+    assert.strictEqual(cache.isStale(cached, hashAtB, b), true);
+  });
+
+  test('legacy cached guides without baseSha keep hash-only staleness', () => {
+    const cache = new GuideCache(makeMemento());
+    const cached = cachedGuide('samehash');
+    assert.strictEqual(cache.isStale(cached, 'samehash', 'b'.repeat(40)), false);
+    assert.strictEqual(cache.isStale(cached, 'otherhash', 'b'.repeat(40)), true);
+  });
+
+  test('hash change alone still flags stale', () => {
+    const cache = new GuideCache(makeMemento());
+    const cached = cachedGuide('samehash', 'a'.repeat(40));
+    assert.strictEqual(cache.isStale(cached, 'otherhash', 'a'.repeat(40)), true);
+  });
+
+  test('matching hash and base is not stale', () => {
+    const cache = new GuideCache(makeMemento());
+    const cached = cachedGuide('samehash', 'a'.repeat(40));
+    assert.strictEqual(cache.isStale(cached, 'samehash', 'a'.repeat(40)), false);
+    assert.strictEqual(cache.isStale(cached, 'samehash', undefined), false);
   });
 });

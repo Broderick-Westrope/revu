@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { getCheckpointState } from '../checkpoint';
 import { ChangedFile, changedFiles, nameStatusHash } from '../git';
 import { getActiveScope, onDidChangeScope, ReviewScope, scopeIncludesUntracked, scopeKey } from '../scope';
 import { GuideCache, onDidChangeGuide } from './cache';
@@ -112,7 +113,7 @@ export class GuideTreeProvider implements vscode.TreeDataProvider<GuideNode> {
 export function registerGuideTree(
   context: vscode.ExtensionContext,
   cache: GuideCache
-): void {
+): () => void {
   const provider = new GuideTreeProvider(cache);
   const treeView = vscode.window.createTreeView('revu.guideView', {
     treeDataProvider: provider,
@@ -130,12 +131,25 @@ export function registerGuideTree(
       return;
     }
     try {
+      let baseRef = scope.baseRef;
+      let currentBaseSha: string | undefined;
+      if (scope.type === 'checkpoint') {
+        const state = await getCheckpointState(scope.repoRoot);
+        if (state.kind === 'explicit' || state.kind === 'implicit') {
+          baseRef = state.sha;
+          currentBaseSha = state.sha;
+        }
+      } else if (scope.type === 'branch') {
+        currentBaseSha = scope.baseRef;
+      }
       const currentHash = await nameStatusHash(
         scope.repoRoot,
-        scope.baseRef,
+        baseRef,
         scopeIncludesUntracked(scope)
       );
-      treeView.message = cache.isStale(cached, currentHash) ? STALE_MESSAGE : undefined;
+      treeView.message = cache.isStale(cached, currentHash, currentBaseSha)
+        ? STALE_MESSAGE
+        : undefined;
     } catch {
       treeView.message = undefined;
     }
@@ -169,4 +183,6 @@ export function registerGuideTree(
   );
 
   void updateStaleness();
+
+  return debouncedStaleness;
 }
