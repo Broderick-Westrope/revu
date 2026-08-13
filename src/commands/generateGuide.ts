@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { changedFiles, diffText, nameStatusHash } from '../git';
-import { getActiveScope, getPrContext, scopeKey } from '../scope';
+import { getActiveScope, getPrContext, scopeIncludesUntracked, scopeKey } from '../scope';
 import { runAgent, AgentError } from '../guide/agent';
 import { fireGuideChanged, GuideCache } from '../guide/cache';
 import { parseGuide, reconcileGuide } from '../guide/model';
@@ -19,7 +19,7 @@ export async function generateGuide(cache: GuideCache): Promise<void> {
     return;
   }
 
-  const includeUntracked = scope.type === 'workingTree';
+  const includeUntracked = scopeIncludesUntracked(scope);
   const files = await changedFiles(scope.repoRoot, scope.baseRef, includeUntracked);
   if (files.length === 0) {
     void vscode.window.showInformationMessage('Revu: no changed files in the current scope.');

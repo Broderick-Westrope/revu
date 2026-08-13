@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangedFile, changedFiles, nameStatusHash } from '../git';
-import { getActiveScope, onDidChangeScope, ReviewScope, scopeKey } from '../scope';
+import { getActiveScope, onDidChangeScope, ReviewScope, scopeIncludesUntracked, scopeKey } from '../scope';
 import { GuideCache, onDidChangeGuide } from './cache';
 import { GuideFile, GuideGroup } from './model';
 
@@ -100,7 +100,7 @@ export class GuideTreeProvider implements vscode.TreeDataProvider<GuideNode> {
       this.changedByPathPromise = changedFiles(
         scope.repoRoot,
         scope.baseRef,
-        scope.type === 'workingTree'
+        scopeIncludesUntracked(scope)
       )
         .then((files) => new Map(files.map((f) => [f.path, f])))
         .catch(() => new Map<string, ChangedFile>());
@@ -133,7 +133,7 @@ export function registerGuideTree(
       const currentHash = await nameStatusHash(
         scope.repoRoot,
         scope.baseRef,
-        scope.type === 'workingTree'
+        scopeIncludesUntracked(scope)
       );
       treeView.message = cache.isStale(cached, currentHash) ? STALE_MESSAGE : undefined;
     } catch {

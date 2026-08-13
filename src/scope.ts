@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import { PrMetadata } from './github/model';
 
-export type ScopeType = 'workingTree' | 'branch';
+export type ScopeType = 'workingTree' | 'branch' | 'checkpoint';
 
 export interface ReviewScope {
   type: ScopeType;
   baseRef: string;
   repoRoot: string;
+  branch?: string;
 }
 
 let activeScope: ReviewScope | undefined;
@@ -34,7 +35,18 @@ export function clearActiveScope(): void {
 }
 
 export function scopeKey(scope: ReviewScope): string {
-  return scope.type === 'workingTree' ? 'workingTree' : `branch:${scope.baseRef}`;
+  switch (scope.type) {
+    case 'workingTree':
+      return 'workingTree';
+    case 'checkpoint':
+      return `checkpoint:${scope.branch}`;
+    case 'branch':
+      return `branch:${scope.baseRef}`;
+  }
+}
+
+export function scopeIncludesUntracked(scope: ReviewScope): boolean {
+  return scope.type === 'workingTree' || scope.type === 'checkpoint';
 }
 
 let prContext: PrMetadata | undefined;

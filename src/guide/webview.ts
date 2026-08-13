@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { showDiff } from '../commands/openDiff';
 import { changedFiles } from '../git';
-import { getActiveScope, onDidChangeScope, scopeKey } from '../scope';
+import { getActiveScope, onDidChangeScope, scopeIncludesUntracked, scopeKey } from '../scope';
 import { GuideCache, onDidChangeGuide } from './cache';
 import { Guide } from './model';
 import { parseLineRange, pointAt } from './pointAt';
@@ -279,7 +279,7 @@ async function handleMessage(
   const files = await changedFiles(
     scope.repoRoot,
     scope.baseRef,
-    scope.type === 'workingTree'
+    scopeIncludesUntracked(scope)
   ).catch(() => []);
   const changed = files.find((f) => f.path === message.path);
   const uri = vscode.Uri.file(path.join(scope.repoRoot, message.path));
