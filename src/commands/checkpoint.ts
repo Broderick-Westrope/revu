@@ -10,9 +10,11 @@ import {
   EMPTY_REF_SHA,
   defaultBranch,
   deleteRef,
+  isAncestor,
   listCommits,
   mergeBase,
   repoRoot,
+  resolveRef,
 } from '../git';
 import { getActiveScope, setActiveScope } from '../scope';
 
@@ -55,8 +57,12 @@ export function syncCheckpointScope(root: string, branch: string, sha: string): 
   }
 }
 
-async function markSafeAt(root: string, branch: string, sha: string): Promise<boolean> {
-  const state = await getCheckpointState(root);
+async function markSafeAt(
+  root: string,
+  branch: string,
+  sha: string,
+  state: CheckpointState
+): Promise<boolean> {
   const expected = expectedOldSha(state);
   if (expected === undefined) {
     void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
@@ -75,8 +81,15 @@ async function markSafeAt(root: string, branch: string, sha: string): Promise<bo
         'Delete stale ref'
       );
       if (action === 'Delete stale ref') {
-        await deleteRef(root, conflict);
-        await markSafe(root, branch, sha, expected);
+        try {
+          await deleteRef(root, conflict);
+          await markSafe(root, branch, sha, expected);
+        } catch (retryErr) {
+          void vscode.window.showErrorMessage(
+            `Revu: could not move checkpoint: ${(retryErr as Error).message}`
+          );
+          return false;
+        }
         syncCheckpointScope(root, branch, sha);
         return true;
       }
@@ -93,7 +106,14 @@ export async function markSafeCommand(node: CommitNode, refresh: () => void): Pr
     void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
     return;
   }
-  if (await markSafeAt(node.repoRoot, state.branch, node.commit.sha)) {
+  const branchTip = await resolveRef(node.repoRoot, `refs/heads/${state.branch}`);
+  if (!branchTip || !(await isAncestor(node.repoRoot, node.commit.sha, branchTip))) {
+    void vscode.window.showErrorMessage(
+      `Revu: commit ${node.commit.shortSha} is not on branch "${state.branch}" — the checkpoint view may be stale. Refresh it and try again.`
+    );
+    return;
+  }
+  if (await markSafeAt(node.repoRoot, state.branch, node.commit.sha, state)) {
     refresh();
   }
 }
@@ -130,7 +150,7 @@ export async function setCheckpointCommand(refresh: () => void): Promise<void> {
   if (!pick) {
     return;
   }
-  if (await markSafeAt(root, state.branch, pick.sha)) {
+  if (await markSafeAt(root, state.branch, pick.sha, state)) {
     refresh();
   }
 }

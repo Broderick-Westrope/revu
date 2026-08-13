@@ -73,7 +73,7 @@ export function startLogsWatcher(
       }
       attempts += 1;
       if (attempts >= maxPollAttempts) {
-        console.warn('Revu: git logs directory never appeared; checkpoint auto-refresh disabled');
+        onFailure();
         return;
       }
       pollTimer = setTimeout(poll, pollIntervalMs);
@@ -100,23 +100,25 @@ export function registerGitWatcher(
   const emitter = new vscode.EventEmitter<void>();
   let watcher: vscode.Disposable | undefined;
   let disposed = false;
+  let warned = false;
+  const warnDegraded = (): void => {
+    if (warned) {
+      return;
+    }
+    warned = true;
+    void vscode.window.showWarningMessage(
+      "Revu: git watcher failed — checkpoint view won't auto-refresh; use the refresh button."
+    );
+  };
   void gitDir(repoRootPath).then(
     (dir) => {
       if (disposed) {
         return;
       }
-      watcher = startLogsWatcher(
-        dir,
-        () => emitter.fire(),
-        () => {
-          void vscode.window.showWarningMessage(
-            "Revu: git watcher failed — checkpoint view won't auto-refresh; use the refresh button."
-          );
-        }
-      );
+      watcher = startLogsWatcher(dir, () => emitter.fire(), warnDegraded);
     },
     () => {
-      console.warn('Revu: could not resolve git dir; checkpoint auto-refresh disabled');
+      warnDegraded();
     }
   );
   context.subscriptions.push(

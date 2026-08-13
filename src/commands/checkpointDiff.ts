@@ -9,7 +9,7 @@ import {
 } from '../checkpointTree';
 import { workingTreeSummary } from '../checkpoint';
 import { ChangedFile, changedFiles, commitChangedFiles } from '../git';
-import { GitUriQuery, REVU_GIT_SCHEME, makeGitUri } from '../gitContentProvider';
+import { EMPTY_REF, GitUriQuery, REVU_GIT_SCHEME, makeGitUri } from '../gitContentProvider';
 import { showDiff } from './openDiff';
 
 export function clampLine(line: number, fileLineCount: number): number {
@@ -110,7 +110,7 @@ export async function compareWithWorkingTree(node?: CommitFileNode): Promise<voi
     line = editor.selection.active.line;
   }
   const changesSinceParent =
-    parentSha === 'EMPTY'
+    parentSha === EMPTY_REF
       ? []
       : await changedFiles(repoRoot, parentSha, false).catch(() => [] as ChangedFile[]);
   const target = resolveWorkingTreeTarget(
@@ -127,9 +127,13 @@ export async function compareWithWorkingTree(node?: CommitFileNode): Promise<voi
   }
   let options: vscode.TextDocumentShowOptions | undefined;
   if (line !== undefined) {
-    const content = fs.readFileSync(path.join(repoRoot, target.path), 'utf8');
-    const clamped = clampLine(line, content.split('\n').length);
-    options = { selection: new vscode.Range(clamped, 0, clamped, 0) };
+    try {
+      const content = fs.readFileSync(path.join(repoRoot, target.path), 'utf8');
+      const clamped = clampLine(line, content.split('\n').length);
+      options = { selection: new vscode.Range(clamped, 0, clamped, 0) };
+    } catch {
+      options = undefined;
+    }
   }
   await vscode.commands.executeCommand(
     'vscode.diff',

@@ -3,6 +3,8 @@ import { showFile } from './git';
 
 export const REVU_GIT_SCHEME = 'revu-git';
 
+export const EMPTY_REF = 'EMPTY';
+
 export interface GitUriQuery {
   ref: string;
   repoRoot: string;
@@ -33,7 +35,7 @@ export class GitContentProvider implements vscode.TextDocumentContentProvider {
     } catch {
       return '';
     }
-    if (query.ref === 'EMPTY') {
+    if (query.ref === EMPTY_REF) {
       return '';
     }
     try {

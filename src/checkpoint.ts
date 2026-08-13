@@ -21,6 +21,10 @@ export function checkpointRef(branch: string): string {
   return CHECKPOINT_REF_PREFIX + branch;
 }
 
+export function branchRef(branch: string): string {
+  return `refs/heads/${branch}`;
+}
+
 export type CheckpointState =
   | { kind: 'explicit'; branch: string; sha: string }
   | { kind: 'implicit'; branch: string; sha: string }
@@ -35,7 +39,7 @@ export async function getCheckpointState(repoRoot: string): Promise<CheckpointSt
   const branch = await currentBranch(repoRoot);
   const sha = await resolveRef(repoRoot, checkpointRef(branch));
   if (sha) {
-    const branchTip = await resolveRef(repoRoot, branch);
+    const branchTip = await resolveRef(repoRoot, branchRef(branch));
     if (branchTip && (await isAncestor(repoRoot, sha, branchTip))) {
       return { kind: 'explicit', branch, sha };
     }
@@ -47,11 +51,11 @@ export async function getCheckpointState(repoRoot: string): Promise<CheckpointSt
     if (branch === def) {
       return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
     }
-    base = await mergeBase(repoRoot, def);
+    base = await mergeBase(repoRoot, branchRef(def));
   } catch {
     return { kind: 'needsInit', branch, reason: 'noDefaultBranch' };
   }
-  const branchTip = await resolveRef(repoRoot, branch);
+  const branchTip = await resolveRef(repoRoot, branchRef(branch));
   if (base === branchTip) {
     return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
   }
@@ -76,7 +80,7 @@ export async function unreviewedCommits(
   checkpointSha: string,
   branch: string
 ): Promise<CommitInfo[]> {
-  return listCommits(repoRoot, `${checkpointSha}..${branch}`);
+  return listCommits(repoRoot, `${checkpointSha}..${branchRef(branch)}`);
 }
 
 export async function workingTreeSummary(

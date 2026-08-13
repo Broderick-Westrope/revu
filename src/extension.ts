@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { startReview, endReview, refreshPrThreads } from './commands/startReview';
+import { refreshPrThreads } from './commands/activateScope';
+import { startReview, endReview } from './commands/startReview';
 import { openDiff } from './commands/openDiff';
 import { generateGuide } from './commands/generateGuide';
 import { quoteComment } from './commands/quoteComment';
@@ -27,12 +28,6 @@ import { GuideCache, guideDisposables } from './guide/cache';
 import { registerGuideTree } from './guide/treeView';
 import { registerGuideWebview } from './guide/webview';
 import { scopeDisposables } from './scope';
-
-let gitStateEvent: vscode.Event<void> | undefined;
-
-export function onDidChangeGitState(): vscode.Event<void> | undefined {
-  return gitStateEvent;
-}
 
 let checkpointProvider: CheckpointTreeProvider | undefined;
 
@@ -91,9 +86,9 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
     void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', true);
-    gitStateEvent = registerGitWatcher(context, root);
+    const gitStateEvent = registerGitWatcher(context, root);
     checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
-    registerCheckpointGuard(context, root, gitStateEvent);
+    registerCheckpointGuard(context, root, gitStateEvent, renderer);
     context.subscriptions.push(gitStateEvent(guideStalenessRefresh));
   })();
 }

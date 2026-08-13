@@ -34,7 +34,8 @@ export async function repoRoot(cwd: string): Promise<string> {
 }
 
 export async function currentBranch(cwd: string): Promise<string> {
-  return (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+  const ref = (await git(cwd, ['symbolic-ref', 'HEAD'])).trim();
+  return ref.replace(/^refs\/heads\//, '');
 }
 
 export async function defaultBranch(cwd: string): Promise<string> {

@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { CheckpointState, getCheckpointState } from './checkpoint';
 import { changedFiles } from './git';
+import { GithubThreadRenderer } from './github/threadRenderer';
+import { activateScope } from './commands/activateScope';
 import { showDiff } from './commands/openDiff';
-import { ReviewScope, getActiveScope, setActiveScope } from './scope';
+import { ReviewScope, getActiveScope } from './scope';
 
 export type GuardAction = 'orphanPrompt' | 'branchPrompt' | 'none';
 
@@ -52,7 +54,15 @@ export async function promptOrphan(
     return;
   }
   if (action === 'Show recovery comparison') {
-    const files = await changedFiles(root, state.sha, false).catch(() => []);
+    let files;
+    try {
+      files = await changedFiles(root, state.sha, false);
+    } catch (err) {
+      void vscode.window.showErrorMessage(
+        `Revu: could not compare against the orphaned checkpoint: ${(err as Error).message}`
+      );
+      return;
+    }
     if (files.length === 0) {
       void vscode.window.showInformationMessage(
         'Revu: no differences against the orphaned checkpoint'
@@ -90,7 +100,8 @@ export async function resolveCheckpointScope(
 async function promptBranchSwitch(
   root: string,
   scope: ReviewScope,
-  branch: string
+  branch: string,
+  renderer: GithubThreadRenderer
 ): Promise<void> {
   const action = await vscode.window.showWarningMessage(
     `Revu: the active checkpoint review is for branch "${scope.branch}", but you are now on "${branch}".`,
@@ -101,8 +112,7 @@ async function promptBranchSwitch(
     await vscode.commands.executeCommand('revu.endReview');
     const next = await resolveCheckpointScope(root);
     if (next) {
-      setActiveScope(next);
-      await vscode.commands.executeCommand('setContext', 'revu.reviewActive', true);
+      await activateScope(next, renderer);
     }
     return;
   }
@@ -114,7 +124,8 @@ async function promptBranchSwitch(
 export function registerCheckpointGuard(
   context: vscode.ExtensionContext,
   root: string,
-  watcherEvent: vscode.Event<void>
+  watcherEvent: vscode.Event<void>,
+  renderer: GithubThreadRenderer
 ): void {
   const promptedOrphanShas = new Set<string>();
   let checking = false;
@@ -125,6 +136,9 @@ export function registerCheckpointGuard(
     checking = true;
     try {
       const state = await getCheckpointState(root);
+      if (state.kind !== 'orphaned') {
+        promptedOrphanShas.clear();
+      }
       const scope = getActiveScope();
       const branch = state.kind === 'detached' ? undefined : state.branch;
       const action = guardAction(state, scope, branch, promptedOrphanShas);
@@ -132,9 +146,10 @@ export function registerCheckpointGuard(
         promptedOrphanShas.add(state.sha);
         await promptOrphan(root, state);
       } else if (action === 'branchPrompt' && scope && branch !== undefined) {
-        await promptBranchSwitch(root, scope, branch);
+        await promptBranchSwitch(root, scope, branch, renderer);
       }
-    } catch {
+    } catch (err) {
+      console.warn('Revu: checkpoint guard check failed', err);
     } finally {
       checking = false;
     }

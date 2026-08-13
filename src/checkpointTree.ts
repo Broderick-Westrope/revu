@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { getCheckpointState, unreviewedCommits, workingTreeSummary } from './checkpoint';
 import { ChangedFile, CommitInfo, changedFiles, commitChangedFiles, resolveRef } from './git';
+import { EMPTY_REF } from './gitContentProvider';
 import { onDidChangeScope } from './scope';
 
 export interface CommitNode {
@@ -51,7 +52,7 @@ export function summaryDescription(commitCount: number, dirty: boolean): string 
 }
 
 export async function resolveParentSha(repoRoot: string, sha: string): Promise<string> {
-  return (await resolveRef(repoRoot, `${sha}^`)) ?? 'EMPTY';
+  return (await resolveRef(repoRoot, `${sha}^`)) ?? EMPTY_REF;
 }
 
 const MESSAGES = {
@@ -269,7 +270,16 @@ export function registerCheckpointTree(
     treeView,
     onGitStateChanged(() => provider.refresh()),
     onDidChangeScope(() => provider.refresh()),
-    vscode.workspace.onDidSaveTextDocument(debouncedRefresh),
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      if (doc.uri.scheme !== 'file') {
+        return;
+      }
+      const rel = path.relative(repoRootPath, doc.uri.fsPath);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return;
+      }
+      debouncedRefresh();
+    }),
     new vscode.Disposable(() => {
       if (debounceTimer) {
         clearTimeout(debounceTimer);

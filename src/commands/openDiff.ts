@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangedFile } from '../git';
-import { makeGitUri } from '../gitContentProvider';
+import { EMPTY_REF, makeGitUri } from '../gitContentProvider';
 import { getActiveScope } from '../scope';
 
 export interface DiffBase {
@@ -33,7 +33,7 @@ export async function showDiff(
       await vscode.commands.executeCommand(
         'vscode.diff',
         makeGitUri(repoRoot, baseRef, changed.path),
-        makeGitUri(repoRoot, 'EMPTY', changed.path),
+        makeGitUri(repoRoot, EMPTY_REF, changed.path),
         `${path.basename(changed.path)} (deleted)`,
         options
       );

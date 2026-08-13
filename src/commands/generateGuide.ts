@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
+import { getCheckpointState } from '../checkpoint';
+import { checkpointScopeFromState } from '../checkpointGuard';
 import { changedFiles, diffText, nameStatusHash } from '../git';
-import { getActiveScope, getPrContext, scopeIncludesUntracked, scopeKey } from '../scope';
+import { getActiveScope, getPrContext, scopeIncludesUntracked, scopeKey, setActiveScope } from '../scope';
 import { runAgent, AgentError } from '../guide/agent';
 import { fireGuideChanged, GuideCache } from '../guide/cache';
 import { parseGuide, reconcileGuide } from '../guide/model';
 import { buildPrompt } from '../guide/prompt';
 
 export async function generateGuide(cache: GuideCache): Promise<void> {
-  const scope = getActiveScope();
+  let scope = getActiveScope();
   if (!scope) {
     const action = await vscode.window.showInformationMessage(
       'Revu: no active review. Start one to generate a guide.',
@@ -17,6 +19,21 @@ export async function generateGuide(cache: GuideCache): Promise<void> {
       await vscode.commands.executeCommand('revu.startReview');
     }
     return;
+  }
+
+  if (scope.type === 'checkpoint') {
+    const state = await getCheckpointState(scope.repoRoot);
+    const fresh = checkpointScopeFromState(state, scope.repoRoot);
+    if (!fresh) {
+      void vscode.window.showErrorMessage(
+        'Revu: the checkpoint for this branch is no longer valid. Restart the review.'
+      );
+      return;
+    }
+    if (fresh.baseRef !== scope.baseRef || fresh.branch !== scope.branch) {
+      setActiveScope(fresh);
+    }
+    scope = fresh;
   }
 
   const includeUntracked = scopeIncludesUntracked(scope);

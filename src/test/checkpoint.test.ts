@@ -173,6 +173,31 @@ suite('checkpoint state', () => {
     });
   });
 
+  test('a tag sharing the branch name does not shadow the branch', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    await git(repo, ['tag', 'feature', mainTip]);
+    assert.deepStrictEqual(await getCheckpointState(repo), {
+      kind: 'implicit',
+      branch: 'feature',
+      sha: mainTip,
+    });
+    await markSafe(repo, 'feature', c2);
+    assert.deepStrictEqual(await getCheckpointState(repo), {
+      kind: 'explicit',
+      branch: 'feature',
+      sha: c2,
+    });
+    const commits = await unreviewedCommits(repo, c2, 'feature');
+    assert.deepStrictEqual(
+      commits.map((c) => c.sha),
+      [c3]
+    );
+  });
+
   test('removeCheckpoint deletes the ref and state returns to implicit', async () => {
     const repo = await makeRepo();
     const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
