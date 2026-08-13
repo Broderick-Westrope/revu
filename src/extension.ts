@@ -5,6 +5,11 @@ import { generateGuide } from './commands/generateGuide';
 import { quoteComment } from './commands/quoteComment';
 import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
+import {
+  markSafeCommand,
+  removeCheckpointCommand,
+  setCheckpointCommand,
+} from './commands/checkpoint';
 import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
 import { repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
@@ -48,9 +53,15 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGuideWebview(context, guideCache);
   context.subscriptions.push(
     vscode.commands.registerCommand('revu.refreshCheckpoint', () => checkpointProvider?.refresh()),
-    vscode.commands.registerCommand('revu.markSafe', () => {}),
-    vscode.commands.registerCommand('revu.setCheckpoint', () => {}),
-    vscode.commands.registerCommand('revu.removeCheckpoint', () => {})
+    vscode.commands.registerCommand('revu.markSafe', (node) =>
+      markSafeCommand(node, () => checkpointProvider?.refresh())
+    ),
+    vscode.commands.registerCommand('revu.setCheckpoint', () =>
+      setCheckpointCommand(() => checkpointProvider?.refresh())
+    ),
+    vscode.commands.registerCommand('revu.removeCheckpoint', () =>
+      removeCheckpointCommand(() => checkpointProvider?.refresh())
+    )
   );
   void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
   void (async () => {
