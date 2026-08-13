@@ -203,3 +203,7 @@ export async function gitDir(cwd: string): Promise<string> {
   return (await git(cwd, ['rev-parse', '--absolute-git-dir'])).trim();
 }
 
+export async function hasUncommittedChanges(cwd: string): Promise<boolean> {
+  return (await git(cwd, ['status', '--porcelain'])).trim().length > 0;
+}
+

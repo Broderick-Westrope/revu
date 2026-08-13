@@ -1,10 +1,15 @@
 import {
+  ChangedFile,
+  CommitInfo,
   EMPTY_REF_SHA,
+  changedFiles,
   currentBranch,
   defaultBranch,
   deleteRef,
+  hasUncommittedChanges,
   isAncestor,
   isDetachedHead,
+  listCommits,
   mergeBase,
   resolveRef,
   updateRef,
@@ -64,4 +69,21 @@ export async function markSafe(
 
 export async function removeCheckpoint(repoRoot: string, branch: string): Promise<void> {
   await deleteRef(repoRoot, checkpointRef(branch));
+}
+
+export async function unreviewedCommits(
+  repoRoot: string,
+  checkpointSha: string,
+  branch: string
+): Promise<CommitInfo[]> {
+  return listCommits(repoRoot, `${checkpointSha}..${branch}`);
+}
+
+export async function workingTreeSummary(
+  repoRoot: string,
+  checkpointSha: string
+): Promise<{ files: ChangedFile[]; dirty: boolean }> {
+  const files = await changedFiles(repoRoot, checkpointSha, true);
+  const dirty = await hasUncommittedChanges(repoRoot);
+  return { files, dirty };
 }
