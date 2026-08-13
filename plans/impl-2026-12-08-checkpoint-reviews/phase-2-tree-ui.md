@@ -1,6 +1,6 @@
 # Phase 2: Checkpoint Tree UI + Watcher
 
-> **Status:** DRAFT
+> **Status:** COMPLETED
 > **Spec:** `plans/design-2026-12-08-checkpoint-reviews.md`
 > **Depends on:** Phase 1 (merged)
 

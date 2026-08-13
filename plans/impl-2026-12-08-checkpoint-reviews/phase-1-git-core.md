@@ -1,6 +1,6 @@
 # Phase 1: Git Plumbing + Checkpoint Core
 
-> **Status:** DRAFT
+> **Status:** COMPLETED
 > **Spec:** `plans/design-2026-12-08-checkpoint-reviews.md`
 
 ## Specification (phase slice)
