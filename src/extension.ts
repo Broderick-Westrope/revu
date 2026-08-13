@@ -18,6 +18,7 @@ import {
   openWorkingTreeFileDiff,
 } from './commands/checkpointDiff';
 import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
+import { registerCheckpointGuard } from './checkpointGuard';
 import { repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { registerGitWatcher } from './gitWatcher';
@@ -92,6 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
     void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', true);
     gitStateEvent = registerGitWatcher(context, root);
     checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
+    registerCheckpointGuard(context, root, gitStateEvent);
   })();
 }
 

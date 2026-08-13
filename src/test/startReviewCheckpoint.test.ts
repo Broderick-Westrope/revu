@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { getCheckpointState, markSafe } from '../checkpoint';
 import { markSafeCommand, syncCheckpointScope } from '../commands/checkpoint';
-import { checkpointScopeFromState } from '../commands/startReview';
+import { checkpointScopeFromState } from '../checkpointGuard';
 import {
   ReviewScope,
   clearActiveScope,

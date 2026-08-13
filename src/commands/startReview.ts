@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CheckpointState, getCheckpointState } from '../checkpoint';
+import { resolveCheckpointScope } from '../checkpointGuard';
 import { currentBranch, defaultBranch, mergeBase, repoRoot } from '../git';
 import { fetchPrMetadata, fetchReviewThreads, isGhAvailable, resetGhAvailability } from '../github/gh';
 import { GithubThreadRenderer } from '../github/threadRenderer';
@@ -38,47 +38,6 @@ export async function refreshPrThreads(renderer: GithubThreadRenderer): Promise<
       `Revu: could not load GitHub PR data: ${(err as Error).message}`
     );
   }
-}
-
-export function checkpointScopeFromState(
-  state: CheckpointState,
-  root: string
-): ReviewScope | undefined {
-  if (state.kind === 'explicit' || state.kind === 'implicit') {
-    return { type: 'checkpoint', baseRef: state.sha, repoRoot: root, branch: state.branch };
-  }
-  return undefined;
-}
-
-export async function resolveCheckpointScope(
-  root: string,
-  retried = false
-): Promise<ReviewScope | undefined> {
-  const state = await getCheckpointState(root);
-  const scope = checkpointScopeFromState(state, root);
-  if (scope) {
-    return scope;
-  }
-  if (state.kind === 'detached') {
-    void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
-    return undefined;
-  }
-  if (retried) {
-    return undefined;
-  }
-  if (state.kind === 'needsInit') {
-    await vscode.commands.executeCommand('revu.setCheckpoint');
-    return resolveCheckpointScope(root, true);
-  }
-  const action = await vscode.window.showWarningMessage(
-    'Revu: the checkpoint is orphaned — its commit is no longer on this branch. Pick a new checkpoint to continue.',
-    'Pick new checkpoint'
-  );
-  if (action !== 'Pick new checkpoint') {
-    return undefined;
-  }
-  await vscode.commands.executeCommand('revu.setCheckpoint');
-  return resolveCheckpointScope(root, true);
 }
 
 export async function startReview(renderer: GithubThreadRenderer): Promise<void> {
