@@ -2,11 +2,16 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangedFile } from '../git';
 import { makeGitUri } from '../gitContentProvider';
-import { getActiveScope, ReviewScope } from '../scope';
+import { getActiveScope } from '../scope';
+
+export interface DiffBase {
+  repoRoot: string;
+  baseRef: string;
+}
 
 export async function showDiff(
   changed: ChangedFile,
-  scope: ReviewScope,
+  scope: DiffBase,
   options?: vscode.TextDocumentShowOptions
 ): Promise<void> {
   const { repoRoot, baseRef } = scope;

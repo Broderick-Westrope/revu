@@ -10,6 +10,13 @@ import {
   removeCheckpointCommand,
   setCheckpointCommand,
 } from './commands/checkpoint';
+import {
+  compareWithWorkingTree,
+  openCommitDiff,
+  openCommitFileDiff,
+  openWorkingTreeDiff,
+  openWorkingTreeFileDiff,
+} from './commands/checkpointDiff';
 import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
 import { repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
@@ -61,7 +68,12 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('revu.removeCheckpoint', () =>
       removeCheckpointCommand(() => checkpointProvider?.refresh())
-    )
+    ),
+    vscode.commands.registerCommand('revu.openCommitDiff', openCommitDiff),
+    vscode.commands.registerCommand('revu.openCommitFileDiff', openCommitFileDiff),
+    vscode.commands.registerCommand('revu.openWorkingTreeDiff', openWorkingTreeDiff),
+    vscode.commands.registerCommand('revu.openWorkingTreeFileDiff', openWorkingTreeFileDiff),
+    vscode.commands.registerCommand('revu.compareWithWorkingTree', compareWithWorkingTree)
   );
   void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
   void (async () => {

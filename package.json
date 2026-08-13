@@ -88,6 +88,11 @@
       {
         "command": "revu.removeCheckpoint",
         "title": "Revu: Remove Checkpoint"
+      },
+      {
+        "command": "revu.compareWithWorkingTree",
+        "title": "Revu: Compare with Working Tree",
+        "icon": "$(edit)"
       }
     ],
     "viewsContainers": {
@@ -155,6 +160,17 @@
           "command": "revu.markSafe",
           "group": "inline",
           "when": "view == revu.checkpointView && viewItem == revu.commit"
+        },
+        {
+          "command": "revu.compareWithWorkingTree",
+          "when": "view == revu.checkpointView && viewItem == revu.commitFile"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "revu.compareWithWorkingTree",
+          "group": "navigation",
+          "when": "resourceScheme == revu-git"
         }
       ],
       "commandPalette": [

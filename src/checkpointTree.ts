@@ -126,6 +126,11 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         item.tooltip = `${element.commit.author} — ${element.commit.date}`;
         item.contextValue = 'revu.commit';
         item.iconPath = new vscode.ThemeIcon('git-commit');
+        item.command = {
+          command: 'revu.openCommitDiff',
+          title: 'Open Commit Diff',
+          arguments: [element],
+        };
         return item;
       }
       case 'commitFile': {
@@ -136,6 +141,11 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         item.resourceUri = vscode.Uri.file(path.join(element.repoRoot, element.file.path));
         item.description = element.file.path;
         item.contextValue = 'revu.commitFile';
+        item.command = {
+          command: 'revu.openCommitFileDiff',
+          title: 'Open Commit File Diff',
+          arguments: [element],
+        };
         return item;
       }
       case 'workingTreeRoot': {
@@ -145,6 +155,11 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         );
         item.contextValue = 'revu.workingTreeRoot';
         item.iconPath = new vscode.ThemeIcon('diff-multiple');
+        item.command = {
+          command: 'revu.openWorkingTreeDiff',
+          title: 'Open Working Tree Diff',
+          arguments: [element],
+        };
         return item;
       }
       case 'workingTreeFile': {
@@ -155,6 +170,11 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         item.resourceUri = vscode.Uri.file(path.join(element.repoRoot, element.file.path));
         item.description = element.file.path;
         item.contextValue = 'revu.workingTreeFile';
+        item.command = {
+          command: 'revu.openWorkingTreeFileDiff',
+          title: 'Open Working Tree File Diff',
+          arguments: [element],
+        };
         return item;
       }
       case 'recoveryRoot': {

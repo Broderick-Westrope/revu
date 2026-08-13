@@ -3,14 +3,21 @@ import { showFile } from './git';
 
 export const REVU_GIT_SCHEME = 'revu-git';
 
-interface GitUriQuery {
+export interface GitUriQuery {
   ref: string;
   repoRoot: string;
   path: string;
+  commitSha?: string;
+  parentSha?: string;
 }
 
-export function makeGitUri(repoRoot: string, ref: string, path: string): vscode.Uri {
-  const query: GitUriQuery = { ref, repoRoot, path };
+export function makeGitUri(
+  repoRoot: string,
+  ref: string,
+  path: string,
+  context?: { commitSha: string; parentSha: string }
+): vscode.Uri {
+  const query: GitUriQuery = { ref, repoRoot, path, ...context };
   return vscode.Uri.from({
     scheme: REVU_GIT_SCHEME,
     path: '/' + path,
