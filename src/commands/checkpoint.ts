@@ -14,6 +14,7 @@ import {
   mergeBase,
   repoRoot,
 } from '../git';
+import { getActiveScope, setActiveScope } from '../scope';
 
 export function expectedOldSha(state: CheckpointState): string | undefined {
   switch (state.kind) {
@@ -47,6 +48,13 @@ async function workspaceRepoRoot(): Promise<string | undefined> {
   }
 }
 
+export function syncCheckpointScope(root: string, branch: string, sha: string): void {
+  const scope = getActiveScope();
+  if (scope?.type === 'checkpoint' && scope.repoRoot === root && scope.branch === branch) {
+    setActiveScope({ ...scope, baseRef: sha });
+  }
+}
+
 async function markSafeAt(root: string, branch: string, sha: string): Promise<boolean> {
   const state = await getCheckpointState(root);
   const expected = expectedOldSha(state);
@@ -56,6 +64,7 @@ async function markSafeAt(root: string, branch: string, sha: string): Promise<bo
   }
   try {
     await markSafe(root, branch, sha, expected);
+    syncCheckpointScope(root, branch, sha);
     return true;
   } catch (err) {
     const message = (err as Error).message;
@@ -68,6 +77,7 @@ async function markSafeAt(root: string, branch: string, sha: string): Promise<bo
       if (action === 'Delete stale ref') {
         await deleteRef(root, conflict);
         await markSafe(root, branch, sha, expected);
+        syncCheckpointScope(root, branch, sha);
         return true;
       }
       return false;
