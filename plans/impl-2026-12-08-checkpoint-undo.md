@@ -1,6 +1,6 @@
 # Checkpoint Undo + Reviewed Commits Implementation Plan
 
-> **Status:** DRAFT
+> **Status:** COMPLETED
 
 ## Specification
 
