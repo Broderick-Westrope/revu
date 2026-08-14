@@ -82,6 +82,11 @@
         "icon": "$(check)"
       },
       {
+        "command": "revu.moveCheckpoint",
+        "title": "Move Checkpoint Here",
+        "icon": "$(discard)"
+      },
+      {
         "command": "revu.setCheckpoint",
         "title": "Revu: Set Checkpoint"
       },
@@ -162,6 +167,11 @@
           "when": "view == revu.checkpointView && viewItem == revu.commit"
         },
         {
+          "command": "revu.moveCheckpoint",
+          "group": "inline",
+          "when": "view == revu.checkpointView && viewItem == revu.reviewedCommit"
+        },
+        {
           "command": "revu.compareWithWorkingTree",
           "when": "view == revu.checkpointView && viewItem == revu.commitFile"
         }
@@ -192,6 +202,10 @@
         },
         {
           "command": "revu.markSafe",
+          "when": "false"
+        },
+        {
+          "command": "revu.moveCheckpoint",
           "when": "false"
         }
       ],

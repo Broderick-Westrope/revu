@@ -3,9 +3,17 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getCheckpointState, markSafe, removeCheckpoint } from '../checkpoint';
-import { expectedOldSha, staleConflictRef } from '../commands/checkpoint';
+import {
+  getCheckpointState,
+  markSafe,
+  removeCheckpoint,
+  reviewedCommits,
+  unreviewedCommits,
+} from '../checkpoint';
+import { expectedOldSha, moveCheckpointCommand, staleConflictRef } from '../commands/checkpoint';
+import { CommitNode } from '../checkpointTree';
 import { EMPTY_REF_SHA } from '../git';
+import { clearActiveScope, getActiveScope, setActiveScope } from '../scope';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -44,7 +52,22 @@ async function commitFile(repo: string, name: string, content: string): Promise<
   return (await git(repo, ['rev-parse', 'HEAD'])).trim();
 }
 
+function commitNode(repo: string, sha: string, parentSha: string): CommitNode {
+  return {
+    kind: 'commit',
+    commit: { sha, shortSha: sha.slice(0, 7), subject: 's', author: 'a', date: 'd' },
+    parentSha,
+    repoRoot: repo,
+    reviewed: true,
+    isCheckpoint: false,
+  };
+}
+
 suite('checkpoint commands', () => {
+  teardown(() => {
+    clearActiveScope();
+  });
+
   suiteTeardown(() => {
     for (const repo of repos) {
       fs.rmSync(repo, { recursive: true, force: true });
@@ -128,5 +151,63 @@ suite('checkpoint commands', () => {
       branch: 'feature',
       sha: mainTip,
     });
+  });
+
+  test('moving the checkpoint backwards returns later commits to the unreviewed state', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    const c4 = await commitFile(repo, 'f3.txt', 'three\n');
+    await markSafe(repo, 'feature', c4);
+    let refreshed = false;
+    await moveCheckpointCommand(commitNode(repo, c2, mainTip), () => {
+      refreshed = true;
+    });
+    assert.strictEqual(refreshed, true);
+    const refSha = (await git(repo, ['rev-parse', 'refs/revu/checkpoint/feature'])).trim();
+    assert.strictEqual(refSha, c2);
+    const unreviewed = await unreviewedCommits(repo, c2, 'feature');
+    assert.deepStrictEqual(
+      unreviewed.map((c) => c.sha),
+      [c4, c3]
+    );
+    const reviewed = await reviewedCommits(repo, c2);
+    assert.deepStrictEqual(
+      reviewed.commits.map((c) => c.sha),
+      [c2]
+    );
+  });
+
+  test('a concurrent external move rejects a backwards move without clobbering the ref', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    const c4 = await commitFile(repo, 'f3.txt', 'three\n');
+    await markSafe(repo, 'feature', c3);
+    const state = await getCheckpointState(repo);
+    const expected = expectedOldSha(state);
+    await git(repo, ['update-ref', 'refs/revu/checkpoint/feature', c4]);
+    await assert.rejects(markSafe(repo, 'feature', c2, expected));
+    const refSha = (await git(repo, ['rev-parse', 'refs/revu/checkpoint/feature'])).trim();
+    assert.strictEqual(refSha, c4);
+  });
+
+  test('a backwards move follows the active checkpoint scope', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    await markSafe(repo, 'feature', c3);
+    setActiveScope({ type: 'checkpoint', baseRef: c3, repoRoot: repo, branch: 'feature' });
+    let refreshed = false;
+    await moveCheckpointCommand(commitNode(repo, c2, mainTip), () => {
+      refreshed = true;
+    });
+    assert.strictEqual(refreshed, true);
+    assert.strictEqual(getActiveScope()?.baseRef, c2);
   });
 });

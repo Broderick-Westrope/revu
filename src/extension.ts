@@ -8,6 +8,7 @@ import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
 import {
   markSafeCommand,
+  moveCheckpointCommand,
   removeCheckpointCommand,
   setCheckpointCommand,
 } from './commands/checkpoint';
@@ -58,6 +59,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('revu.refreshCheckpoint', () => checkpointProvider?.refresh()),
     vscode.commands.registerCommand('revu.markSafe', (node) =>
       markSafeCommand(node, () => checkpointProvider?.refresh())
+    ),
+    vscode.commands.registerCommand('revu.moveCheckpoint', (node) =>
+      moveCheckpointCommand(node, () => checkpointProvider?.refresh())
     ),
     vscode.commands.registerCommand('revu.setCheckpoint', () =>
       setCheckpointCommand(() => checkpointProvider?.refresh())
