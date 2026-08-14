@@ -4,9 +4,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  REVIEWED_COMMITS_CAP,
   getCheckpointState,
   markSafe,
   removeCheckpoint,
+  reviewedCommits,
   unreviewedCommits,
   workingTreeSummary,
 } from '../checkpoint';
@@ -286,5 +288,79 @@ suite('unreviewed range', () => {
       files.map((f) => f.path),
       ['f1.txt']
     );
+  });
+});
+
+suite('reviewed range', () => {
+  suiteTeardown(() => {
+    for (const repo of repos) {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('reviewedCommits lists merge-base..checkpoint newest-first', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    await commitFile(repo, 'f3.txt', 'three\n');
+    const { commits, truncated } = await reviewedCommits(repo, c3);
+    assert.strictEqual(truncated, false);
+    assert.deepStrictEqual(
+      commits.map((c) => c.sha),
+      [c3, c2]
+    );
+  });
+
+  test('reviewedCommits is empty when the checkpoint equals the merge-base', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const { commits, truncated } = await reviewedCommits(repo, mainTip);
+    assert.deepStrictEqual(commits, []);
+    assert.strictEqual(truncated, false);
+  });
+
+  test('reviewedCommits caps at the limit and flags truncation', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    let tip = '';
+    const shas: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      tip = await commitFile(repo, `f${i}.txt`, `content ${i}\n`);
+      shas.push(tip);
+    }
+    const { commits, truncated } = await reviewedCommits(repo, tip);
+    assert.strictEqual(truncated, true);
+    assert.strictEqual(commits.length, REVIEWED_COMMITS_CAP);
+    assert.deepStrictEqual(
+      commits.map((c) => c.sha),
+      shas.reverse().slice(0, REVIEWED_COMMITS_CAP)
+    );
+  });
+
+  test('reviewedCommits falls back to listing from the checkpoint without a default branch', async () => {
+    const repo = await makeRepo('trunk');
+    const rootSha = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const { commits, truncated } = await reviewedCommits(repo, c2);
+    assert.strictEqual(truncated, false);
+    assert.deepStrictEqual(
+      commits.map((c) => c.sha),
+      [c2, rootSha]
+    );
+  });
+
+  test('reviewedCommits is empty when the checkpoint is below the merge-base', async () => {
+    const repo = await makeRepo();
+    const rootSha = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await commitFile(repo, 'main.txt', 'main\n');
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const { commits, truncated } = await reviewedCommits(repo, rootSha);
+    assert.deepStrictEqual(commits, []);
+    assert.strictEqual(truncated, false);
   });
 });

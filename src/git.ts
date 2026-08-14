@@ -161,13 +161,17 @@ export async function isAncestor(
   }
 }
 
-export async function listCommits(cwd: string, range: string): Promise<CommitInfo[]> {
-  const output = await git(cwd, [
-    'log',
-    '--first-parent',
-    '--format=%H%x00%h%x00%s%x00%an%x00%cI',
-    range,
-  ]);
+export async function listCommits(
+  cwd: string,
+  range: string,
+  maxCount?: number
+): Promise<CommitInfo[]> {
+  const args = ['log', '--first-parent', '--format=%H%x00%h%x00%s%x00%an%x00%cI'];
+  if (maxCount !== undefined) {
+    args.push(`--max-count=${maxCount}`);
+  }
+  args.push(range);
+  const output = await git(cwd, args);
   const commits: CommitInfo[] = [];
   for (const line of output.split('\n')) {
     if (!line.trim()) {

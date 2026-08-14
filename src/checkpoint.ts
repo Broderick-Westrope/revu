@@ -83,6 +83,30 @@ export async function unreviewedCommits(
   return listCommits(repoRoot, `${checkpointSha}..${branchRef(branch)}`);
 }
 
+export const REVIEWED_COMMITS_CAP = 25;
+
+export interface ReviewedCommits {
+  commits: CommitInfo[];
+  truncated: boolean;
+}
+
+export async function reviewedCommits(
+  repoRoot: string,
+  checkpointSha: string
+): Promise<ReviewedCommits> {
+  let range = checkpointSha;
+  try {
+    const def = await defaultBranch(repoRoot);
+    const base = await mergeBase(repoRoot, branchRef(def));
+    range = `${base}..${checkpointSha}`;
+  } catch {}
+  const commits = await listCommits(repoRoot, range, REVIEWED_COMMITS_CAP + 1);
+  return {
+    commits: commits.slice(0, REVIEWED_COMMITS_CAP),
+    truncated: commits.length > REVIEWED_COMMITS_CAP,
+  };
+}
+
 export async function workingTreeSummary(
   repoRoot: string,
   checkpointSha: string
