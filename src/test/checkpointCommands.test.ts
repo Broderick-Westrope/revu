@@ -55,7 +55,14 @@ async function commitFile(repo: string, name: string, content: string): Promise<
 function commitNode(repo: string, sha: string, parentSha: string): CommitNode {
   return {
     kind: 'commit',
-    commit: { sha, shortSha: sha.slice(0, 7), subject: 's', author: 'a', date: 'd' },
+    commit: {
+      sha,
+      shortSha: sha.slice(0, 7),
+      subject: 's',
+      author: 'a',
+      date: 'd',
+      parents: [parentSha],
+    },
     parentSha,
     repoRoot: repo,
     reviewed: true,
@@ -209,5 +216,23 @@ suite('checkpoint commands', () => {
     });
     assert.strictEqual(refreshed, true);
     assert.strictEqual(getActiveScope()?.baseRef, c2);
+  });
+
+  test('moving to a commit not on the current branch leaves the ref and skips refresh', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    await git(repo, ['checkout', '-b', 'side', 'main']);
+    const sideSha = await commitFile(repo, 'side.txt', 'side\n');
+    await git(repo, ['checkout', 'feature']);
+    await markSafe(repo, 'feature', c2);
+    let refreshed = false;
+    await moveCheckpointCommand(commitNode(repo, sideSha, mainTip), () => {
+      refreshed = true;
+    });
+    assert.strictEqual(refreshed, false);
+    const refSha = (await git(repo, ['rev-parse', 'refs/revu/checkpoint/feature'])).trim();
+    assert.strictEqual(refSha, c2);
   });
 });

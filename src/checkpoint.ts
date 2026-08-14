@@ -99,7 +99,9 @@ export async function reviewedCommits(
     const def = await defaultBranch(repoRoot);
     const base = await mergeBase(repoRoot, branchRef(def));
     range = `${base}..${checkpointSha}`;
-  } catch {}
+  } catch {
+    // no default branch → fall back to listing from the checkpoint
+  }
   const commits = await listCommits(repoRoot, range, REVIEWED_COMMITS_CAP + 1);
   return {
     commits: commits.slice(0, REVIEWED_COMMITS_CAP),

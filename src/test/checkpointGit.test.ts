@@ -122,7 +122,15 @@ suite('git ref and history primitives', () => {
     assert.strictEqual(commits[1].author, 'Test User');
     assert.match(commits[1].shortSha, /^[0-9a-f]{7,}$/);
     assert.match(commits[1].date, /^\d{4}-\d{2}-\d{2}T/);
+    assert.deepStrictEqual(commits[0].parents, [secondSha, sideSha]);
+    assert.deepStrictEqual(commits[1].parents, [rootSha]);
     assert.ok(!commits.some((c) => c.sha === sideSha));
+  });
+
+  test('listCommits gives a root commit an empty parents list', async () => {
+    const commits = await listCommits(repo, rootSha);
+    assert.strictEqual(commits.length, 1);
+    assert.deepStrictEqual(commits[0].parents, []);
   });
 
   test('commitChangedFiles reports changes against the first parent', async () => {

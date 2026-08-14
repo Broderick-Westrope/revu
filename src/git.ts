@@ -13,6 +13,7 @@ export interface CommitInfo {
   subject: string;
   author: string;
   date: string;
+  parents: string[];
 }
 
 export const EMPTY_REF_SHA = '0000000000000000000000000000000000000000';
@@ -166,7 +167,7 @@ export async function listCommits(
   range: string,
   maxCount?: number
 ): Promise<CommitInfo[]> {
-  const args = ['log', '--first-parent', '--format=%H%x00%h%x00%s%x00%an%x00%cI'];
+  const args = ['log', '--first-parent', '--format=%H%x00%h%x00%s%x00%an%x00%cI%x00%P'];
   if (maxCount !== undefined) {
     args.push(`--max-count=${maxCount}`);
   }
@@ -177,8 +178,8 @@ export async function listCommits(
     if (!line.trim()) {
       continue;
     }
-    const [sha, shortSha, subject, author, date] = line.split('\0');
-    commits.push({ sha, shortSha, subject, author, date });
+    const [sha, shortSha, subject, author, date, parentsRaw] = line.split('\0');
+    commits.push({ sha, shortSha, subject, author, date, parents: parentsRaw ? parentsRaw.split(' ') : [] });
   }
   return commits;
 }

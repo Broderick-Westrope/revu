@@ -6,13 +6,12 @@ import * as path from 'path';
 import {
   CheckpointTreeProvider,
   CommitNode,
-  resolveParentSha,
 } from '../checkpointTree';
 import {
   clampLine,
   resolveWorkingTreeTarget,
 } from '../commands/checkpointDiff';
-import { ChangedFile } from '../git';
+import { ChangedFile, listCommits } from '../git';
 import { GitUriQuery, makeGitUri } from '../gitContentProvider';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
@@ -86,12 +85,15 @@ suite('checkpoint diff URIs', () => {
     assert.notStrictEqual(rightQuery.ref, 'HEAD');
   });
 
-  test('parent resolution: normal commits get the parent SHA, root commits get EMPTY', async () => {
+  test('parent resolution: normal commits list the parent SHA, root commits list none', async () => {
     const repo = await makeRepo();
     const rootSha = (await git(repo, ['rev-parse', 'HEAD'])).trim();
-    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    assert.strictEqual(await resolveParentSha(repo, c2), rootSha);
-    assert.strictEqual(await resolveParentSha(repo, rootSha), 'EMPTY');
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const commits = await listCommits(repo, 'HEAD');
+    assert.deepStrictEqual(
+      commits.map((c) => c.parents),
+      [[rootSha], []]
+    );
   });
 
   test('makeGitUri without commit context omits the optional fields', () => {

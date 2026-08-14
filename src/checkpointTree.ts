@@ -7,7 +7,7 @@ import {
   unreviewedCommits,
   workingTreeSummary,
 } from './checkpoint';
-import { ChangedFile, CommitInfo, changedFiles, commitChangedFiles, resolveRef } from './git';
+import { ChangedFile, CommitInfo, changedFiles, commitChangedFiles } from './git';
 import { EMPTY_REF } from './gitContentProvider';
 import { onDidChangeScope } from './scope';
 
@@ -72,10 +72,6 @@ export function summaryDescription(
     return base;
   }
   return `${base} · ${reviewedCount}${reviewedTruncated ? '+' : ''} reviewed`;
-}
-
-export async function resolveParentSha(repoRoot: string, sha: string): Promise<string> {
-  return (await resolveRef(repoRoot, `${sha}^`)) ?? EMPTY_REF;
 }
 
 const MESSAGES = {
@@ -251,12 +247,6 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
           workingTreeSummary(this.repoRoot, state.sha),
           reviewedCommits(this.repoRoot, state.sha),
         ]);
-        const [parentShas, reviewedParentShas] = await Promise.all([
-          Promise.all(commits.map((commit) => resolveParentSha(this.repoRoot, commit.sha))),
-          Promise.all(
-            reviewed.commits.map((commit) => resolveParentSha(this.repoRoot, commit.sha))
-          ),
-        ]);
         this.update(
           undefined,
           summaryDescription(
@@ -269,20 +259,20 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         const nodes: CheckpointNode[] = [
           { kind: 'workingTreeRoot', checkpointSha: state.sha, repoRoot: this.repoRoot },
           ...commits.map(
-            (commit, i): CommitNode => ({
+            (commit): CommitNode => ({
               kind: 'commit',
               commit,
-              parentSha: parentShas[i],
+              parentSha: commit.parents[0] ?? EMPTY_REF,
               repoRoot: this.repoRoot,
               reviewed: false,
               isCheckpoint: false,
             })
           ),
           ...reviewed.commits.map(
-            (commit, i): CommitNode => ({
+            (commit): CommitNode => ({
               kind: 'commit',
               commit,
-              parentSha: reviewedParentShas[i],
+              parentSha: commit.parents[0] ?? EMPTY_REF,
               repoRoot: this.repoRoot,
               reviewed: true,
               isCheckpoint: commit.sha === state.sha,

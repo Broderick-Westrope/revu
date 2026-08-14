@@ -3,12 +3,12 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import { markSafe } from '../checkpoint';
 import {
   CheckpointNode,
   CheckpointTreeProvider,
   CommitNode,
-  resolveParentSha,
   summaryDescription,
 } from '../checkpointTree';
 
@@ -192,14 +192,17 @@ suite('checkpoint tree provider', () => {
     const plain = provider.getTreeItem(unreviewedItem);
     assert.strictEqual(plain.contextValue, 'revu.commit');
     assert.strictEqual(plain.description, unreviewedItem.commit.shortSha);
+    assert.strictEqual((plain.iconPath as vscode.ThemeIcon).id, 'git-commit');
     const checkpointItem = bySha.get(c3);
     assert.ok(checkpointItem);
     assert.strictEqual(checkpointItem.contextValue, 'revu.checkpointCommit');
     assert.match(String(checkpointItem.description), / · checkpoint$/);
+    assert.strictEqual((checkpointItem.iconPath as vscode.ThemeIcon).id, 'milestone');
     const reviewedItem = bySha.get(c2);
     assert.ok(reviewedItem);
     assert.strictEqual(reviewedItem.contextValue, 'revu.reviewedCommit');
     assert.match(String(reviewedItem.description), / · reviewed$/);
+    assert.strictEqual((reviewedItem.iconPath as vscode.ThemeIcon).id, 'check');
     assert.strictEqual(reviewedItem.command?.command, 'revu.openCommitDiff');
   });
 
@@ -304,13 +307,5 @@ suite('checkpoint tree helpers', () => {
       '3 commits + dirty working tree · 5 reviewed'
     );
     assert.strictEqual(summaryDescription(1, false, 25, true), '1 commit · 25+ reviewed');
-  });
-
-  test('resolveParentSha returns EMPTY for a root commit', async () => {
-    const repo = await makeRepo();
-    const rootSha = (await git(repo, ['rev-parse', 'HEAD'])).trim();
-    assert.strictEqual(await resolveParentSha(repo, rootSha), 'EMPTY');
-    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    assert.strictEqual(await resolveParentSha(repo, c2), rootSha);
   });
 });

@@ -120,7 +120,14 @@ suite('start review checkpoint scope', () => {
       await markSafeCommand(
         {
           kind: 'commit',
-          commit: { sha: c3, shortSha: c3.slice(0, 7), subject: 's', author: 'a', date: 'd' },
+          commit: {
+            sha: c3,
+            shortSha: c3.slice(0, 7),
+            subject: 's',
+            author: 'a',
+            date: 'd',
+            parents: [c2],
+          },
           parentSha: c2,
           repoRoot: repo,
           reviewed: false,
