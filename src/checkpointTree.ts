@@ -1,6 +1,12 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getCheckpointState, unreviewedCommits, workingTreeSummary } from './checkpoint';
+import {
+  REVIEWED_COMMITS_CAP,
+  getCheckpointState,
+  reviewedCommits,
+  unreviewedCommits,
+  workingTreeSummary,
+} from './checkpoint';
 import { ChangedFile, CommitInfo, changedFiles, commitChangedFiles, resolveRef } from './git';
 import { EMPTY_REF } from './gitContentProvider';
 import { onDidChangeScope } from './scope';
@@ -10,6 +16,8 @@ export interface CommitNode {
   commit: CommitInfo;
   parentSha: string;
   repoRoot: string;
+  reviewed: boolean;
+  isCheckpoint: boolean;
 }
 
 export interface CommitFileNode {
@@ -39,16 +47,31 @@ export interface RecoveryRootNode {
   repoRoot: string;
 }
 
+export interface ReviewedOverflowNode {
+  kind: 'reviewedOverflow';
+  repoRoot: string;
+}
+
 export type CheckpointNode =
   | CommitNode
   | CommitFileNode
   | WorkingTreeRootNode
   | WorkingTreeFileNode
-  | RecoveryRootNode;
+  | RecoveryRootNode
+  | ReviewedOverflowNode;
 
-export function summaryDescription(commitCount: number, dirty: boolean): string {
+export function summaryDescription(
+  commitCount: number,
+  dirty: boolean,
+  reviewedCount: number,
+  reviewedTruncated: boolean
+): string {
   const commits = `${commitCount} commit${commitCount === 1 ? '' : 's'}`;
-  return dirty ? `${commits} + dirty working tree` : commits;
+  const base = dirty ? `${commits} + dirty working tree` : commits;
+  if (reviewedCount === 0) {
+    return base;
+  }
+  return `${base} · ${reviewedCount}${reviewedTruncated ? '+' : ''} reviewed`;
 }
 
 export async function resolveParentSha(repoRoot: string, sha: string): Promise<string> {
@@ -123,10 +146,20 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
           element.commit.subject,
           vscode.TreeItemCollapsibleState.Collapsed
         );
-        item.description = element.commit.shortSha;
         item.tooltip = `${element.commit.author} — ${element.commit.date}`;
-        item.contextValue = 'revu.commit';
-        item.iconPath = new vscode.ThemeIcon('git-commit');
+        if (element.isCheckpoint) {
+          item.description = `${element.commit.shortSha} · checkpoint`;
+          item.contextValue = 'revu.checkpointCommit';
+          item.iconPath = new vscode.ThemeIcon('milestone');
+        } else if (element.reviewed) {
+          item.description = `${element.commit.shortSha} · reviewed`;
+          item.contextValue = 'revu.reviewedCommit';
+          item.iconPath = new vscode.ThemeIcon('check');
+        } else {
+          item.description = element.commit.shortSha;
+          item.contextValue = 'revu.commit';
+          item.iconPath = new vscode.ThemeIcon('git-commit');
+        }
         item.command = {
           command: 'revu.openCommitDiff',
           title: 'Open Commit Diff',
@@ -187,6 +220,15 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         item.iconPath = new vscode.ThemeIcon('history');
         return item;
       }
+      case 'reviewedOverflow': {
+        const item = new vscode.TreeItem(
+          `Older reviewed commits hidden (showing ${REVIEWED_COMMITS_CAP})`,
+          vscode.TreeItemCollapsibleState.None
+        );
+        item.contextValue = 'revu.reviewedOverflow';
+        item.iconPath = new vscode.ThemeIcon('info');
+        return item;
+      }
     }
   }
 
@@ -204,15 +246,27 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         return [{ kind: 'recoveryRoot', orphanedSha: state.sha, repoRoot: this.repoRoot }];
       case 'explicit':
       case 'implicit': {
-        const [commits, summary] = await Promise.all([
+        const [commits, summary, reviewed] = await Promise.all([
           unreviewedCommits(this.repoRoot, state.sha, state.branch),
           workingTreeSummary(this.repoRoot, state.sha),
+          reviewedCommits(this.repoRoot, state.sha),
         ]);
-        const parentShas = await Promise.all(
-          commits.map((commit) => resolveParentSha(this.repoRoot, commit.sha))
+        const [parentShas, reviewedParentShas] = await Promise.all([
+          Promise.all(commits.map((commit) => resolveParentSha(this.repoRoot, commit.sha))),
+          Promise.all(
+            reviewed.commits.map((commit) => resolveParentSha(this.repoRoot, commit.sha))
+          ),
+        ]);
+        this.update(
+          undefined,
+          summaryDescription(
+            commits.length,
+            summary.dirty,
+            reviewed.commits.length,
+            reviewed.truncated
+          )
         );
-        this.update(undefined, summaryDescription(commits.length, summary.dirty));
-        return [
+        const nodes: CheckpointNode[] = [
           { kind: 'workingTreeRoot', checkpointSha: state.sha, repoRoot: this.repoRoot },
           ...commits.map(
             (commit, i): CommitNode => ({
@@ -220,9 +274,25 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
               commit,
               parentSha: parentShas[i],
               repoRoot: this.repoRoot,
+              reviewed: false,
+              isCheckpoint: false,
+            })
+          ),
+          ...reviewed.commits.map(
+            (commit, i): CommitNode => ({
+              kind: 'commit',
+              commit,
+              parentSha: reviewedParentShas[i],
+              repoRoot: this.repoRoot,
+              reviewed: true,
+              isCheckpoint: commit.sha === state.sha,
             })
           ),
         ];
+        if (reviewed.truncated) {
+          nodes.push({ kind: 'reviewedOverflow', repoRoot: this.repoRoot });
+        }
+        return nodes;
       }
     }
   }

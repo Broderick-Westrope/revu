@@ -123,6 +123,8 @@ suite('start review checkpoint scope', () => {
           commit: { sha: c3, shortSha: c3.slice(0, 7), subject: 's', author: 'a', date: 'd' },
           parentSha: c2,
           repoRoot: repo,
+          reviewed: false,
+          isCheckpoint: false,
         },
         () => {
           refreshed = true;

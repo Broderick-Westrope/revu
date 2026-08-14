@@ -139,18 +139,124 @@ suite('checkpoint tree provider', () => {
     assert.ok(paths.includes('untracked.txt'));
   });
 
-  test('after markSafe only later commits remain', async () => {
+  test('after markSafe later commits stay unreviewed and earlier ones render as reviewed', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     await markSafe(repo, 'feature', c2);
-    const { provider } = makeProvider(repo);
+    const { provider, captured } = makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     assert.deepStrictEqual(
       commits.map((n) => n.commit.sha),
-      [c3]
+      [c3, c2]
     );
+    assert.deepStrictEqual(
+      commits.map((n) => n.reviewed),
+      [false, true]
+    );
+    assert.deepStrictEqual(
+      commits.map((n) => n.isCheckpoint),
+      [false, true]
+    );
+    assert.strictEqual(captured.description, '1 commit · 1 reviewed');
+  });
+
+  test('reviewed commit nodes carry resolved 40-char parent SHAs', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    await commitFile(repo, 'f2.txt', 'two\n');
+    await markSafe(repo, 'feature', c2);
+    const { provider } = makeProvider(repo);
+    const commits = commitNodes(await provider.getChildren());
+    const reviewed = commits.filter((n) => n.reviewed);
+    assert.strictEqual(reviewed.length, 1);
+    assert.strictEqual(reviewed[0].parentSha, mainTip);
+    assert.match(reviewed[0].parentSha, /^[0-9a-f]{40}$/);
+  });
+
+  test('getTreeItem distinguishes unreviewed, reviewed, and checkpoint commits', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    await commitFile(repo, 'f3.txt', 'three\n');
+    await markSafe(repo, 'feature', c3);
+    const { provider } = makeProvider(repo);
+    const commits = commitNodes(await provider.getChildren());
+    const bySha = new Map(commits.map((n) => [n.commit.sha, provider.getTreeItem(n)]));
+    const unreviewedItem = commits.find((n) => !n.reviewed);
+    assert.ok(unreviewedItem);
+    const plain = provider.getTreeItem(unreviewedItem);
+    assert.strictEqual(plain.contextValue, 'revu.commit');
+    assert.strictEqual(plain.description, unreviewedItem.commit.shortSha);
+    const checkpointItem = bySha.get(c3);
+    assert.ok(checkpointItem);
+    assert.strictEqual(checkpointItem.contextValue, 'revu.checkpointCommit');
+    assert.match(String(checkpointItem.description), / · checkpoint$/);
+    const reviewedItem = bySha.get(c2);
+    assert.ok(reviewedItem);
+    assert.strictEqual(reviewedItem.contextValue, 'revu.reviewedCommit');
+    assert.match(String(reviewedItem.description), / · reviewed$/);
+    assert.strictEqual(reviewedItem.command?.command, 'revu.openCommitDiff');
+  });
+
+  test('reviewed commit children list that commit\'s changed files', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    await commitFile(repo, 'f2.txt', 'two\n');
+    await markSafe(repo, 'feature', c2);
+    const { provider } = makeProvider(repo);
+    const commits = commitNodes(await provider.getChildren());
+    const reviewed = commits.find((n) => n.reviewed);
+    assert.ok(reviewed);
+    const files = await provider.getChildren(reviewed);
+    assert.strictEqual(files.length, 1);
+    const file = files[0];
+    assert.strictEqual(file.kind, 'commitFile');
+    if (file.kind === 'commitFile') {
+      assert.strictEqual(file.file.path, 'f1.txt');
+      assert.strictEqual(file.commitSha, c2);
+    }
+  });
+
+  test('truncated reviewed listing appends a terminal overflow node and 25+ summary', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    let tip = '';
+    for (let i = 0; i < 30; i++) {
+      tip = await commitFile(repo, `f${i}.txt`, `content ${i}\n`);
+    }
+    await commitFile(repo, 'unreviewed.txt', 'later\n');
+    await markSafe(repo, 'feature', tip);
+    const { provider, captured } = makeProvider(repo);
+    const roots = await provider.getChildren();
+    const last = roots[roots.length - 1];
+    assert.strictEqual(last.kind, 'reviewedOverflow');
+    const item = provider.getTreeItem(last);
+    assert.strictEqual(item.label, 'Older reviewed commits hidden (showing 25)');
+    assert.strictEqual(item.command, undefined);
+    assert.deepStrictEqual(await provider.getChildren(last), []);
+    assert.strictEqual(commitNodes(roots).filter((n) => n.reviewed).length, 25);
+    assert.strictEqual(captured.description, '1 commit · 25+ reviewed');
+  });
+
+  test('implicit state yields zero reviewed nodes', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const { provider, captured } = makeProvider(repo);
+    const roots = await provider.getChildren();
+    const commits = commitNodes(roots);
+    assert.deepStrictEqual(
+      commits.map((n) => n.reviewed),
+      [false]
+    );
+    assert.ok(!roots.some((n) => n.kind === 'reviewedOverflow'));
+    assert.strictEqual(captured.description, '1 commit');
   });
 
   test('orphaned state shows a message and a recovery node', async () => {
@@ -189,10 +295,15 @@ suite('checkpoint tree provider', () => {
 });
 
 suite('checkpoint tree helpers', () => {
-  test('summaryDescription pluralises and flags dirt', () => {
-    assert.strictEqual(summaryDescription(0, false), '0 commits');
-    assert.strictEqual(summaryDescription(1, false), '1 commit');
-    assert.strictEqual(summaryDescription(2, true), '2 commits + dirty working tree');
+  test('summaryDescription pluralises, flags dirt, and appends the reviewed count', () => {
+    assert.strictEqual(summaryDescription(0, false, 0, false), '0 commits');
+    assert.strictEqual(summaryDescription(1, false, 0, false), '1 commit');
+    assert.strictEqual(summaryDescription(2, true, 0, false), '2 commits + dirty working tree');
+    assert.strictEqual(
+      summaryDescription(3, true, 5, false),
+      '3 commits + dirty working tree · 5 reviewed'
+    );
+    assert.strictEqual(summaryDescription(1, false, 25, true), '1 commit · 25+ reviewed');
   });
 
   test('resolveParentSha returns EMPTY for a root commit', async () => {
