@@ -12,6 +12,7 @@ import {
   changedFiles,
   commitChangedFiles,
   hasUncommittedChanges,
+  mergeTree,
 } from './git';
 import { EMPTY_REF } from './gitContentProvider';
 
@@ -71,6 +72,23 @@ export function summaryDescription(
   return `${base} · ${reviewedCount}${reviewedTruncated ? '+' : ''} reviewed`;
 }
 
+export async function commitDiff(
+  node: CommitNode
+): Promise<{ files: ChangedFile[]; parentSha: string }> {
+  const [first, second] = node.commit.parents;
+  if (first && second) {
+    const parentSha = await mergeTree(node.repoRoot, first, second);
+    return {
+      files: await commitChangedFiles(node.repoRoot, node.commit.sha, parentSha),
+      parentSha,
+    };
+  }
+  return {
+    files: await commitChangedFiles(node.repoRoot, node.commit.sha),
+    parentSha: node.parentSha,
+  };
+}
+
 const MESSAGES = {
   orphaned:
     'Checkpoint is orphaned — its commit is no longer on this branch (rebase or amend). Re-pick with "Revu: Set Checkpoint".',
@@ -101,12 +119,12 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
     }
     switch (element.kind) {
       case 'commit': {
-        const files = await commitChangedFiles(element.repoRoot, element.commit.sha);
+        const { files, parentSha } = await commitDiff(element);
         return files.map((file) => ({
           kind: 'commitFile',
           file,
           commitSha: element.commit.sha,
-          parentSha: element.parentSha,
+          parentSha,
           repoRoot: element.repoRoot,
         }));
       }

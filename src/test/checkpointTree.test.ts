@@ -11,6 +11,7 @@ import {
   CommitNode,
   summaryDescription,
 } from '../checkpointTree';
+import { showFile } from '../git';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -126,6 +127,49 @@ suite('checkpoint tree provider', () => {
       commits.map((n) => n.commit.sha),
       [c2]
     );
+  });
+
+  test('a clean merge row lists no files from the merged-in branch', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    await git(repo, ['checkout', 'main']);
+    await commitFile(repo, 'm.txt', 'main\n');
+    await git(repo, ['checkout', 'feature']);
+    await git(repo, ['merge', '--no-edit', 'main']);
+    const { provider } = makeProvider(repo);
+    const merge = commitNodes(await provider.getChildren()).find(
+      (n) => n.commit.parents.length === 2
+    );
+    assert.ok(merge);
+    assert.deepStrictEqual(await provider.getChildren(merge), []);
+  });
+
+  test('a merge row with a hand-resolved conflict lists only the resolved file', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'base.txt', 'feature side\n');
+    await git(repo, ['checkout', 'main']);
+    await commitFile(repo, 'base.txt', 'main side\n');
+    await commitFile(repo, 'm.txt', 'main\n');
+    await git(repo, ['checkout', 'feature']);
+    await assert.rejects(git(repo, ['merge', '--no-edit', 'main']));
+    fs.writeFileSync(path.join(repo, 'base.txt'), 'resolved\n');
+    await git(repo, ['add', 'base.txt']);
+    await git(repo, ['commit', '--no-edit']);
+    const { provider } = makeProvider(repo);
+    const merge = commitNodes(await provider.getChildren()).find(
+      (n) => n.commit.parents.length === 2
+    );
+    assert.ok(merge);
+    const files = await provider.getChildren(merge);
+    assert.deepStrictEqual(
+      files.map((n) => (n.kind === 'commitFile' ? n.file.path : n.kind)),
+      ['base.txt']
+    );
+    const file = files[0];
+    assert.ok(file.kind === 'commitFile');
+    assert.match(await showFile(repo, file.parentSha, 'base.txt'), /^<<<<<<< /m);
   });
 
   test('commit nodes carry resolved 40-char parent SHAs', async () => {

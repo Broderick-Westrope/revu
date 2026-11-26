@@ -30,6 +30,23 @@ export function git(cwd: string, args: string[]): Promise<string> {
   });
 }
 
+function gitAllowingExitCodes(cwd: string, args: string[], okCodes: number[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      if (err && !okCodes.includes((err as { code?: number }).code ?? -1)) {
+        reject(err);
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
+export async function mergeTree(cwd: string, ours: string, theirs: string): Promise<string> {
+  const output = await gitAllowingExitCodes(cwd, ['merge-tree', '--write-tree', ours, theirs], [1]);
+  return output.split('\n')[0].trim();
+}
+
 export async function repoRoot(cwd: string): Promise<string> {
   return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
 }
@@ -184,7 +201,14 @@ export async function listCommits(
   return commits;
 }
 
-export async function commitChangedFiles(cwd: string, sha: string): Promise<ChangedFile[]> {
+export async function commitChangedFiles(
+  cwd: string,
+  sha: string,
+  baseRef?: string
+): Promise<ChangedFile[]> {
+  if (baseRef) {
+    return parseNameStatus(await git(cwd, ['diff', '--name-status', '-M', baseRef, sha]));
+  }
   const parent = await resolveRef(cwd, `${sha}^`);
   if (parent) {
     const output = await git(cwd, ['diff', '--name-status', '-M', `${sha}^`, sha]);

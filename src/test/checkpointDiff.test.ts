@@ -7,8 +7,10 @@ import {
   CheckpointTreeProvider,
   CommitNode,
 } from '../checkpointTree';
+import * as vscode from 'vscode';
 import {
   clampLine,
+  openCommitDiff,
   resolveWorkingTreeTarget,
 } from '../commands/checkpointDiff';
 import { ChangedFile, listCommits } from '../git';
@@ -83,6 +85,34 @@ suite('checkpoint diff URIs', () => {
     assert.match(rightQuery.parentSha ?? '', /^[0-9a-f]{40}$/);
     assert.notStrictEqual(rightQuery.ref, 'feature');
     assert.notStrictEqual(rightQuery.ref, 'HEAD');
+  });
+
+  test('opening a merge commit diffs against the automatic merge of its parents', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'base.txt', 'feature side\n');
+    await git(repo, ['checkout', 'main']);
+    await commitFile(repo, 'base.txt', 'main side\n');
+    await git(repo, ['checkout', 'feature']);
+    await assert.rejects(git(repo, ['merge', '--no-edit', 'main']));
+    fs.writeFileSync(path.join(repo, 'base.txt'), 'resolved\n');
+    await git(repo, ['add', 'base.txt']);
+    await git(repo, ['commit', '--no-edit']);
+    const provider = new CheckpointTreeProvider(repo, () => undefined);
+    const merge = (await provider.getChildren()).find(
+      (n): n is CommitNode => n.kind === 'commit' && n.commit.parents.length === 2
+    );
+    assert.ok(merge);
+    await openCommitDiff(merge);
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    assert.ok(input instanceof vscode.TabInputTextDiff);
+    const leftQuery = JSON.parse(input.original.query) as GitUriQuery;
+    const [p1, p2] = merge.commit.parents;
+    const tree = (
+      await run(repo, 'sh', ['-c', `git merge-tree --write-tree ${p1} ${p2}; true`])
+    ).split('\n')[0];
+    assert.strictEqual(leftQuery.ref, tree);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   });
 
   test('parent resolution: normal commits list the parent SHA, root commits list none', async () => {

@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CommitFileNode, CommitNode, WorkingTreeFileNode } from '../checkpointTree';
-import { ChangedFile, changedFiles, commitChangedFiles } from '../git';
+import { CommitFileNode, CommitNode, WorkingTreeFileNode, commitDiff } from '../checkpointTree';
+import { ChangedFile, changedFiles } from '../git';
 import { EMPTY_REF, GitUriQuery, REVU_GIT_SCHEME, makeGitUri } from '../gitContentProvider';
 import { showDiff } from './openDiff';
 
@@ -53,7 +53,7 @@ export async function openCommitFileDiff(node: CommitFileNode): Promise<void> {
 }
 
 export async function openCommitDiff(node: CommitNode): Promise<void> {
-  const files = await commitChangedFiles(node.repoRoot, node.commit.sha);
+  const { files, parentSha } = await commitDiff(node);
   if (files.length === 0) {
     void vscode.window.showInformationMessage('Revu: commit has no changed files');
     return;
@@ -62,7 +62,7 @@ export async function openCommitDiff(node: CommitNode): Promise<void> {
     kind: 'commitFile',
     file: files[0],
     commitSha: node.commit.sha,
-    parentSha: node.parentSha,
+    parentSha,
     repoRoot: node.repoRoot,
   });
 }
