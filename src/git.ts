@@ -1,5 +1,4 @@
 import { execFile } from 'child_process';
-import { createHash } from 'crypto';
 
 export interface ChangedFile {
   path: string;
@@ -18,19 +17,7 @@ export interface CommitInfo {
 
 export const EMPTY_REF_SHA = '0000000000000000000000000000000000000000';
 
-export function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(stdout);
-      }
-    });
-  });
-}
-
-function gitAllowingExitCodes(cwd: string, args: string[], okCodes: number[]): Promise<string> {
+export function git(cwd: string, args: string[], okCodes: number[] = []): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
       if (err && !okCodes.includes((err as { code?: number }).code ?? -1)) {
@@ -43,7 +30,7 @@ function gitAllowingExitCodes(cwd: string, args: string[], okCodes: number[]): P
 }
 
 export async function mergeTree(cwd: string, ours: string, theirs: string): Promise<string> {
-  const output = await gitAllowingExitCodes(cwd, ['merge-tree', '--write-tree', ours, theirs], [1]);
+  const output = await git(cwd, ['merge-tree', '--write-tree', ours, theirs], [1]);
   return output.split('\n')[0].trim();
 }
 
@@ -54,6 +41,11 @@ export async function repoRoot(cwd: string): Promise<string> {
 export async function currentBranch(cwd: string): Promise<string> {
   const ref = (await git(cwd, ['symbolic-ref', 'HEAD'])).trim();
   return ref.replace(/^refs\/heads\//, '');
+}
+
+export async function checkedOutBranch(cwd: string): Promise<string | undefined> {
+  const ref = (await git(cwd, ['symbolic-ref', '--quiet', 'HEAD'], [1])).trim();
+  return ref ? ref.replace(/^refs\/heads\//, '') : undefined;
 }
 
 export async function defaultBranch(cwd: string): Promise<string> {
@@ -125,28 +117,6 @@ export async function changedFiles(
 
 export async function showFile(cwd: string, ref: string, path: string): Promise<string> {
   return git(cwd, ['show', `${ref}:${path}`]);
-}
-
-export async function nameStatusHash(
-  cwd: string,
-  baseRef: string,
-  includeUntracked: boolean
-): Promise<string> {
-  const nameStatus = await git(cwd, ['diff', '--name-status', '-M', baseRef]);
-  let input = nameStatus;
-  if (includeUntracked) {
-    const untracked = await git(cwd, ['ls-files', '--others', '--exclude-standard']);
-    input += '\n' + untracked;
-  }
-  return createHash('sha256').update(input).digest('hex');
-}
-
-export async function diffText(cwd: string, baseRef: string, path?: string): Promise<string> {
-  const args = ['diff', baseRef];
-  if (path) {
-    args.push('--', path);
-  }
-  return git(cwd, args);
 }
 
 export async function resolveRef(cwd: string, ref: string): Promise<string | undefined> {

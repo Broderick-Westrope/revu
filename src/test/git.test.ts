@@ -8,7 +8,6 @@ import {
   currentBranch,
   defaultBranch,
   mergeBase,
-  nameStatusHash,
   repoRoot,
   showFile,
 } from '../git';
@@ -100,16 +99,6 @@ suite('git wrapper', () => {
     assert.strictEqual(content, 'original content\nline two\nline three\n');
   });
 
-  test('nameStatusHash changes when an untracked file is added', async () => {
-    const before = await nameStatusHash(repo, 'HEAD', true);
-    fs.writeFileSync(path.join(repo, 'another-untracked.txt'), 'more content\n');
-    const after = await nameStatusHash(repo, 'HEAD', true);
-    assert.notStrictEqual(before, after);
-    const withoutUntracked = await nameStatusHash(repo, 'HEAD', false);
-    const again = await nameStatusHash(repo, 'HEAD', false);
-    assert.strictEqual(withoutUntracked, again);
-    fs.unlinkSync(path.join(repo, 'another-untracked.txt'));
-  });
 });
 
 suite('git wrapper during a conflicted merge', () => {

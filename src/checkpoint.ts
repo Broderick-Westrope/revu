@@ -2,12 +2,10 @@ import {
   CommitInfo,
   EMPTY_REF_SHA,
   currentBranch,
-  defaultBranch,
   deleteRef,
   isAncestor,
   isDetachedHead,
   listCommits,
-  mergeBase,
   resolveRef,
   updateRef,
 } from './git';
@@ -25,7 +23,7 @@ export function branchRef(branch: string): string {
 export type CheckpointState =
   | { kind: 'explicit'; branch: string; sha: string }
   | { kind: 'implicit'; branch: string; sha: string }
-  | { kind: 'needsInit'; branch: string; reason: 'noDefaultBranch' | 'onDefaultBranch' }
+  | { kind: 'needsInit'; branch: string }
   | { kind: 'orphaned'; branch: string; sha: string }
   | { kind: 'detached' };
 
@@ -46,14 +44,13 @@ export async function getCheckpointState(
     return { kind: 'orphaned', branch, sha };
   }
   if (!implicitBase) {
-    return { kind: 'needsInit', branch, reason: 'noDefaultBranch' };
+    return { kind: 'needsInit', branch };
   }
-  const base = implicitBase;
   const branchTip = await resolveRef(repoRoot, branchRef(branch));
-  if (base === branchTip) {
-    return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
+  if (implicitBase === branchTip) {
+    return { kind: 'needsInit', branch };
   }
-  return { kind: 'implicit', branch, sha: base };
+  return { kind: 'implicit', branch, sha: implicitBase };
 }
 
 export async function markSafe(

@@ -10,10 +10,10 @@ export interface DiffBase {
 
 export async function showDiff(
   changed: ChangedFile,
-  scope: DiffBase,
+  base: DiffBase,
   options?: vscode.TextDocumentShowOptions
 ): Promise<void> {
-  const { repoRoot, baseRef } = scope;
+  const { repoRoot, baseRef } = base;
   const fileUri = (p: string): vscode.Uri => vscode.Uri.file(path.join(repoRoot, p));
 
   switch (changed.status) {

@@ -100,7 +100,7 @@ suite('checkpoint commands', () => {
       EMPTY_REF_SHA
     );
     assert.strictEqual(
-      expectedOldSha({ kind: 'needsInit', branch: 'b', reason: 'onDefaultBranch' }),
+      expectedOldSha({ kind: 'needsInit', branch: 'b' }),
       EMPTY_REF_SHA
     );
     assert.strictEqual(expectedOldSha({ kind: 'detached' }), undefined);
@@ -242,14 +242,11 @@ suite('checkpoint commands', () => {
     assert.strictEqual(last.sha, parentTip);
   });
 
-  test('the picker falls back to the merge-base with the default branch', async () => {
+  test('without a parent base the picker offers commits only', async () => {
     const repo = await makeRepo();
-    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
     await git(repo, ['checkout', '-b', 'feature']);
     await commitFile(repo, 'f1.txt', 'one\n');
     const items = await checkpointPickItems(repo);
-    const last = items[items.length - 1];
-    assert.strictEqual(last.label, 'Merge-base with main');
-    assert.strictEqual(last.sha, mainTip);
+    assert.ok(items.every((item) => !item.label.startsWith('Merge-base')));
   });
 });

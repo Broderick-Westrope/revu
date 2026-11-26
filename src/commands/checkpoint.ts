@@ -8,11 +8,9 @@ import {
 import { CommitNode } from '../checkpointTree';
 import {
   EMPTY_REF_SHA,
-  defaultBranch,
   deleteRef,
   isAncestor,
   listCommits,
-  mergeBase,
   repoRoot,
   resolveRef,
 } from '../git';
@@ -81,7 +79,7 @@ async function markSafeAt(
           );
           return false;
         }
-            return true;
+        return true;
       }
       return false;
     }
@@ -135,17 +133,7 @@ export async function checkpointPickItems(
       description: implicitBase.slice(0, 7),
       sha: implicitBase,
     });
-    return items;
   }
-  try {
-    const def = await defaultBranch(root);
-    const base = await mergeBase(root, def);
-    items.push({
-      label: `Merge-base with ${def}`,
-      description: base.slice(0, 7),
-      sha: base,
-    });
-  } catch {}
   return items;
 }
 

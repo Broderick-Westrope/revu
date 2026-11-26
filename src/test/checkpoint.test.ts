@@ -94,7 +94,6 @@ suite('checkpoint state', () => {
     assert.deepStrictEqual(state, {
       kind: 'needsInit',
       branch: 'feature',
-      reason: 'onDefaultBranch',
     });
   });
 
@@ -158,14 +157,13 @@ suite('checkpoint state', () => {
     assert.deepStrictEqual(state, {
       kind: 'needsInit',
       branch: 'feature',
-      reason: 'noDefaultBranch',
     });
   });
 
   test('needsInit when on the default branch', async () => {
     const repo = await makeRepo();
     const state = await getCheckpointState(repo, await legacyBase(repo));
-    assert.deepStrictEqual(state, { kind: 'needsInit', branch: 'main', reason: 'onDefaultBranch' });
+    assert.deepStrictEqual(state, { kind: 'needsInit', branch: 'main' });
   });
 
   test('needsInit when the merge-base equals the branch tip', async () => {
@@ -175,7 +173,6 @@ suite('checkpoint state', () => {
     assert.deepStrictEqual(state, {
       kind: 'needsInit',
       branch: 'feature',
-      reason: 'onDefaultBranch',
     });
   });
 
