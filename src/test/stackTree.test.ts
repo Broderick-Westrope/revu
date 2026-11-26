@@ -54,7 +54,7 @@ async function setup(
   external: StackExternal = { prs: [] }
 ): Promise<{ provider: StackTreeProvider; messages: (string | undefined)[] }> {
   const state = new ReviewState(repo, async () => external);
-  await state.refresh();
+  await state.refresh({ external: true });
   const messages: (string | undefined)[] = [];
   const provider = new StackTreeProvider(state, (message) => messages.push(message));
   return { provider, messages };

@@ -50,11 +50,6 @@
         "title": "Quote in local comment"
       },
       {
-        "command": "revu.refreshCheckpoint",
-        "title": "Revu: Refresh Checkpoint View",
-        "icon": "$(refresh)"
-      },
-      {
         "command": "revu.markSafe",
         "title": "Mark Safe",
         "icon": "$(check)"
@@ -123,7 +118,7 @@
       },
       {
         "command": "revu.compareWith",
-        "title": "Revu: Compare With…"
+        "title": "Revu: Compare With\u2026"
       },
       {
         "command": "revu.resetParent",
@@ -205,7 +200,7 @@
           "when": "view == revu.changesView"
         },
         {
-          "command": "revu.refreshCheckpoint",
+          "command": "revu.refreshStack",
           "group": "navigation",
           "when": "view == revu.checkpointView"
         },

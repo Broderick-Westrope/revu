@@ -12,8 +12,6 @@ function isInside(root: string, file: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
-export type Refresh = (options?: { external?: boolean }) => Promise<void>;
-
 function errorText(err: unknown): string {
   const stderr = (err as { stderr?: string }).stderr?.trim();
   return stderr || (err instanceof Error ? err.message : String(err));
@@ -49,8 +47,7 @@ async function createWorktree(root: string, branch: string): Promise<void> {
 
 export async function switchToBranchCommand(
   state: ReviewState,
-  node: StackNode | undefined,
-  refresh: Refresh
+  node: StackNode | undefined
 ): Promise<void> {
   const stack = state.snapshot?.stack;
   if (!node || !stack) {
@@ -80,7 +77,7 @@ export async function switchToBranchCommand(
         return;
       case 'switch':
         await git(root, ['switch', node.branch]);
-        await refresh({ external: true });
+        await state.refresh({ external: true });
         return;
       case 'refuseDirty':
         void vscode.window.showWarningMessage(
@@ -103,7 +100,7 @@ export async function switchToBranchCommand(
     }
   } catch (err) {
     void vscode.window.showErrorMessage(`Revu: couldn't switch to ${node.branch}: ${errorText(err)}`);
-    await refresh({ external: true });
+    await state.refresh({ external: true });
   }
 }
 
@@ -145,7 +142,7 @@ function pullMessage(result: PullResult, trunk: string): { warn: boolean; text: 
   }
 }
 
-export async function pullDefaultBranchCommand(state: ReviewState, refresh: Refresh): Promise<void> {
+export async function pullDefaultBranchCommand(state: ReviewState): Promise<void> {
   const stack = state.snapshot?.stack;
   if (!stack) {
     return;
@@ -161,10 +158,10 @@ export async function pullDefaultBranchCommand(state: ReviewState, refresh: Refr
   } catch (err) {
     void vscode.window.showErrorMessage(`Revu: Pull Default Branch failed: ${errorText(err)}`);
   }
-  await refresh();
+  await state.refresh();
 }
 
-export async function mergeParentCommand(state: ReviewState, refresh: Refresh): Promise<void> {
+export async function mergeParentCommand(state: ReviewState): Promise<void> {
   const stack = state.snapshot?.stack;
   const current = stack?.current;
   if (!stack || !current || current.onTrunk) {
@@ -224,10 +221,10 @@ export async function mergeParentCommand(state: ReviewState, refresh: Refresh): 
   } catch (err) {
     void vscode.window.showErrorMessage(`Revu: Merge Parent failed: ${errorText(err)}`);
   }
-  await refresh();
+  await state.refresh();
 }
 
-export async function compareWithCommand(state: ReviewState, refresh: Refresh): Promise<void> {
+export async function compareWithCommand(state: ReviewState): Promise<void> {
   const stack = state.snapshot?.stack;
   const current = stack?.current;
   if (!stack || !current || current.onTrunk) {
@@ -252,10 +249,10 @@ export async function compareWithCommand(state: ReviewState, refresh: Refresh): 
   } catch (err) {
     void vscode.window.showErrorMessage(`Revu: couldn't set the parent: ${errorText(err)}`);
   }
-  await refresh();
+  await state.refresh();
 }
 
-export async function resetParentCommand(state: ReviewState, refresh: Refresh): Promise<void> {
+export async function resetParentCommand(state: ReviewState): Promise<void> {
   const current = state.snapshot?.stack.current;
   if (!current) {
     return;
@@ -265,5 +262,5 @@ export async function resetParentCommand(state: ReviewState, refresh: Refresh): 
   } catch (err) {
     void vscode.window.showErrorMessage(`Revu: couldn't reset the parent: ${errorText(err)}`);
   }
-  await refresh();
+  await state.refresh();
 }

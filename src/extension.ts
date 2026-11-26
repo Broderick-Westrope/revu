@@ -40,12 +40,8 @@ import { StackNode, registerStackTree } from './stackTree';
 
 let reviewState: ReviewState | undefined;
 
-async function refreshReview(options: { external?: boolean } = {}): Promise<void> {
-  await reviewState?.refresh({ external: options.external ?? false });
-}
-
 function refreshAfterCheckpointChange(): void {
-  void refreshReview();
+  void reviewState?.refresh();
 }
 
 function withState<T extends unknown[]>(
@@ -59,7 +55,7 @@ async function setCheckpointMode(on: boolean): Promise<void> {
     return;
   }
   reviewState.setCheckpointMode(on);
-  await reviewState.refresh({ external: false });
+  await reviewState.refresh();
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -79,36 +75,38 @@ export function activate(context: vscode.ExtensionContext): void {
       'revu.refreshPrThreads',
       withState((state) => refreshPrThreads(renderer, state.repoRoot, { announce: true }))
     ),
-    vscode.commands.registerCommand('revu.refreshStack', () => refreshReview({ external: true })),
+    vscode.commands.registerCommand(
+      'revu.refreshStack',
+      withState((state) => state.refresh({ external: true }))
+    ),
     vscode.commands.registerCommand(
       'revu.switchToBranch',
-      withState((state, node: StackNode) => switchToBranchCommand(state, node, refreshReview))
+      withState((state, node: StackNode) => switchToBranchCommand(state, node))
     ),
     vscode.commands.registerCommand('revu.openBranchInNewWindow', openBranchInNewWindowCommand),
     vscode.commands.registerCommand('revu.openPr', openPrCommand),
     vscode.commands.registerCommand(
       'revu.pullDefaultBranch',
-      withState((state) => pullDefaultBranchCommand(state, refreshReview))
+      withState(pullDefaultBranchCommand)
     ),
     vscode.commands.registerCommand(
       'revu.mergeParent',
-      withState((state) => mergeParentCommand(state, refreshReview))
+      withState(mergeParentCommand)
     ),
     vscode.commands.registerCommand(
       'revu.compareWith',
-      withState((state) => compareWithCommand(state, refreshReview))
+      withState(compareWithCommand)
     ),
     vscode.commands.registerCommand(
       'revu.resetParent',
-      withState((state) => resetParentCommand(state, refreshReview))
+      withState(resetParentCommand)
     ),
     vscode.commands.registerCommand('revu.showSinceCheckpoint', () => setCheckpointMode(true)),
     vscode.commands.registerCommand('revu.showAllChanges', () => setCheckpointMode(false)),
     vscode.commands.registerCommand('revu.openChangesFile', (node: ChangesFileNode) =>
       showDiff(node.file, { repoRoot: node.repoRoot, baseRef: node.baseRef })
     ),
-    vscode.commands.registerCommand('revu.refreshCheckpoint', () => refreshReview()),
-    vscode.commands.registerCommand('revu.markSafe', (node) =>
+        vscode.commands.registerCommand('revu.markSafe', (node) =>
       markSafeCommand(node, refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.moveCheckpoint', (node) =>
@@ -152,14 +150,14 @@ export function activate(context: vscode.ExtensionContext): void {
     registerStackContext(context, state);
     registerCheckpointGuard(context, root, gitStateEvent);
     registerReviewRefresh(context, state, gitStateEvent, renderer, store);
-    await state.refresh({ external: false });
+    await state.refresh();
     registerCheckpointTree(
       context,
       root,
       state.onDidChange,
       () => state.snapshot?.stack.current?.diffBase
     );
-    await state.refresh();
+    await state.refresh({ external: true });
   })();
 }
 
@@ -199,7 +197,7 @@ function registerReviewRefresh(
     try {
       const branch = await branchNow();
       if (branch !== lastBranch) {
-        await state.refresh();
+        await state.refresh({ external: true });
       } else {
         await state.refreshIfChanged();
       }
@@ -231,7 +229,7 @@ function registerReviewRefresh(
       if (saveTimer) {
         clearTimeout(saveTimer);
       }
-      saveTimer = setTimeout(() => void state.refresh({ external: false }), 1000);
+      saveTimer = setTimeout(() => void state.refreshIfChanged(), 1000);
     }),
     new vscode.Disposable(() => {
       if (saveTimer) {

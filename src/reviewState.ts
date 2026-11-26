@@ -45,7 +45,7 @@ export class ReviewState {
 
   async refresh(options: { external?: boolean } = {}): Promise<void> {
     await this.resolve();
-    if (options.external ?? true) {
+    if (options.external) {
       const next = await this.fetchExternalOnce(this.lastBranch);
       if (!next.prsFailed) {
         this.hasPrData = true;

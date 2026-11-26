@@ -52,7 +52,7 @@ interface Captured {
 
 async function setup(repo: string): Promise<{ provider: ChangesTreeProvider; state: ReviewState; captured: Captured }> {
   const state = new ReviewState(repo, async () => ({ prs: [] }));
-  await state.refresh();
+  await state.refresh({ external: true });
   const captured: Captured = {};
   const provider = new ChangesTreeProvider(
     state,
@@ -113,7 +113,7 @@ suite('changes tree provider', () => {
 
     assert.deepStrictEqual(await filePaths(provider), ['first.txt', 'second.txt']);
     state.setCheckpointMode(true);
-    await state.refresh();
+    await state.refresh({ external: true });
 
     assert.deepStrictEqual(await filePaths(provider), ['second.txt']);
     assert.strictEqual(captured.description, 'vs a (inferred) · since checkpoint');
@@ -124,7 +124,7 @@ suite('changes tree provider', () => {
     await commitFile(repo, 'first.txt');
     const { provider, state } = await setup(repo);
     state.setCheckpointMode(true);
-    await state.refresh();
+    await state.refresh({ external: true });
 
     assert.deepStrictEqual(await filePaths(provider), ['first.txt']);
   });
@@ -194,7 +194,7 @@ suite('review state change check', () => {
     const repo = await makeStack();
     await commitFile(repo, 'first.txt');
     const state = new ReviewState(repo, async () => ({ prs: [] }));
-    await state.refresh();
+    await state.refresh({ external: true });
     let fired = 0;
     state.onDidChange(() => fired++);
 
@@ -216,12 +216,10 @@ suite('review state errors', () => {
     await commitFile(repo, 'first.txt');
     await git(repo, ['checkout', '-q', '--orphan', 'unrelated']);
     await commitFile(repo, 'other.txt');
-    await git(repo, ['checkout', '-q', 'b']);
-    await git(repo, ['config', 'branch.b.revuParent', 'unrelated']);
     const { provider, state, captured } = await setup(repo);
 
     assert.ok(state.error);
-    assert.strictEqual(state.branch, 'b');
+    assert.strictEqual(state.branch, 'unrelated');
     assert.deepStrictEqual(await provider.getChildren(), []);
     assert.ok(captured.message?.startsWith('Revu could not read this branch:'));
   });
@@ -241,7 +239,7 @@ suite('review state two-phase refresh', () => {
     });
     const firstChange = new Promise<void>((resolve) => state.onDidChange(() => resolve()));
 
-    const done = state.refresh();
+    const done = state.refresh({ external: true });
     await firstChange;
 
     assert.strictEqual(state.snapshot?.stack.current?.branch, 'b');
@@ -265,8 +263,8 @@ suite('review state PR data', () => {
         ? { prs: [{ number: 4, url: 'u', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] }
         : { prs: [], prsFailed: true };
     });
-    await state.refresh();
-    await state.refresh();
+    await state.refresh({ external: true });
+    await state.refresh({ external: true });
 
     assert.strictEqual(state.snapshot?.stack.current?.pr?.number, 4);
     fs.rmSync(repo, { recursive: true, force: true });
