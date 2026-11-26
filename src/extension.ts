@@ -172,8 +172,7 @@ function registerStackContext(context: vscode.ExtensionContext, state: ReviewSta
     state.onDidChange(() => {
       const current = state.snapshot?.stack.current;
       const onFeatureBranch = current !== undefined && !current.onTrunk;
-      const hasOverride =
-        current?.source === 'override' || current?.warning === 'override target missing';
+      const hasOverride = current?.hasOverride === true;
       void vscode.commands.executeCommand('setContext', 'revu.onFeatureBranch', onFeatureBranch);
       void vscode.commands.executeCommand('setContext', 'revu.inGhStack', current?.inGhStack === true);
       void vscode.commands.executeCommand('setContext', 'revu.hasParentOverride', hasOverride);

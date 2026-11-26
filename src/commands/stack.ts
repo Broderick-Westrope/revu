@@ -180,7 +180,7 @@ export async function mergeParentCommand(state: ReviewState): Promise<void> {
   }
   try {
     const result = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `Revu: merging ${current.parentRef}` },
+      { location: vscode.ProgressLocation.Notification, title: `Revu: merging ${current.parent}` },
       () => mergeParent(state.repoRoot, current)
     );
     switch (result.kind) {
@@ -196,18 +196,18 @@ export async function mergeParentCommand(state: ReviewState): Promise<void> {
         break;
       case 'upToDate':
         void vscode.window.showInformationMessage(
-          `Revu: ${current.branch} already contains ${current.parentRef}.`
+          `Revu: ${current.branch} already contains ${current.parent}.`
         );
         break;
       case 'conflict':
         void vscode.window.showWarningMessage(
-          `Revu: merging ${current.parentRef} hit conflicts. The merge is still in progress; resolve it in Source Control.`
+          `Revu: merging ${current.parent} hit conflicts. The merge is still in progress; resolve it in Source Control.`
         );
         await vscode.commands.executeCommand('workbench.view.scm');
         break;
       case 'merged':
         void vscode.window.showInformationMessage(
-          `Revu: merged ${current.parentRef} into ${current.branch}.` +
+          `Revu: merged ${current.parent} into ${current.branch}.` +
             (result.checkpointMoved ? ' The checkpoint moved to the merge commit.' : '')
         );
         break;

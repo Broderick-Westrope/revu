@@ -22,6 +22,7 @@ export interface BranchResolution {
   parentRef: string;
   source: ParentSource;
   ambiguous?: boolean;
+  hasOverride?: boolean;
   warning?: string;
   pr?: PrSummary;
   stackBase?: string;
@@ -90,7 +91,7 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
   const trunkName = external.ghStack?.trunk ?? (await defaultBranch(repoRoot));
   const trunk: Trunk = {
     name: trunkName,
-    ref: remoteRefs.has(`origin/${trunkName}`) ? `origin/${trunkName}` : trunkName,
+    ref: remoteRefs.has(`origin/${trunkName}`) ? `origin/${trunkName}` : `refs/heads/${trunkName}`,
   };
 
   const parents = new Map<string, string[]>();
@@ -207,8 +208,9 @@ class Resolver {
     const cyclic = [...direct.keys()].filter((branch) => this.inCycle(branch, direct));
     const overridden = cyclic.filter((branch) => direct.get(branch)?.source === 'override');
     for (const branch of overridden.length > 0 ? overridden : cyclic) {
+      const hasOverride = direct.get(branch)?.hasOverride;
       const source = direct.get(branch)?.source === 'override' ? 'override' : 'trunk';
-      direct.set(branch, { ...this.trunkResolution(branch), source, warning: 'parent cycle' });
+      direct.set(branch, { ...this.trunkResolution(branch), source, hasOverride, warning: 'parent cycle' });
     }
     for (const layer of this.external.ghStack?.branches ?? []) {
       const resolution = direct.get(layer.name);
@@ -246,7 +248,7 @@ class Resolver {
     if (parent === this.graph.trunk.name) {
       return { ...this.trunkResolution(branch), source };
     }
-    return { branch, parent, parentRef: parent, source, pr: this.anyPrs.get(branch) };
+    return { branch, parent, parentRef: `refs/heads/${parent}`, source, pr: this.anyPrs.get(branch) };
   }
 
   private resolveDirect(branch: string): BranchResolution {
@@ -254,12 +256,12 @@ class Resolver {
     const override = this.graph.overrides.get(branch);
     if (override !== undefined) {
       if (override === this.graph.trunk.name || this.graph.tips.has(override)) {
-        return this.toBranch(branch, override, 'override');
+        return { ...this.toBranch(branch, override, 'override'), hasOverride: true };
       }
       warning = 'override target missing';
     }
     const resolved = this.fromGhStack(branch) ?? this.fromPr(branch) ?? this.infer(branch);
-    return warning ? { ...resolved, warning } : resolved;
+    return warning ? { ...resolved, warning, hasOverride: true } : resolved;
   }
 
   private fromGhStack(branch: string): BranchResolution | undefined {

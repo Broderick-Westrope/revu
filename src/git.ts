@@ -248,7 +248,7 @@ export async function aheadBehind(
   parentRef: string,
   branch: string
 ): Promise<{ ahead: number; behind: number }> {
-  const output = await git(cwd, ['rev-list', '--left-right', '--count', `${parentRef}...${branch}`]);
+  const output = await git(cwd, ['rev-list', '--left-right', '--count', `${parentRef}...refs/heads/${branch}`]);
   const [behind, ahead] = output.trim().split(/\s+/).map(Number);
   return { ahead, behind };
 }

@@ -106,7 +106,7 @@ suite('stack parent resolution', () => {
 
     const result = await resolveStack(repo, noExternal);
 
-    assert.strictEqual(result.trunk.ref, 'main');
+    assert.strictEqual(result.trunk.ref, 'refs/heads/main');
     assert.strictEqual(result.current?.source, 'trunk');
   });
 
@@ -512,4 +512,44 @@ suite('stack parent resolution', () => {
 
     assert.deepStrictEqual([...descendantsOf(result, 'a')].sort(), ['b', 'c']);
   });
+  test('a tag named like the parent branch does not replace it', async () => {
+    const repo = await localRepo();
+    await git(repo, ['tag', 'feat']);
+    await git(repo, ['checkout', '-q', '-b', 'feat']);
+    const featTip = await commitFile(repo, 'f1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.parent, 'feat');
+    assert.strictEqual(result.current?.diffBase, featTip);
+  });
+
+  test('a reflog whose creation entry expired falls back instead of trusting a later entry', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    const reflog = path.join(repo, '.git', 'logs', 'refs', 'heads', 'b');
+    const lines = fs.readFileSync(reflog, 'utf8').split('\n').filter(Boolean);
+    fs.writeFileSync(reflog, lines.slice(1).join('\n') + '\n');
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.parent, 'a');
+  });
+
+  test('override state is reported separately from warnings', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['config', 'branch.b.revuParent', 'gone']);
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.hasOverride, true);
+  });
+
 });
