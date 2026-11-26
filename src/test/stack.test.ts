@@ -3,7 +3,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { StackExternal, resolveStack } from '../stack';
+import { StackExternal, descendantsOf, resolveStack } from '../stack';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -496,5 +496,20 @@ suite('stack parent resolution', () => {
     assert.strictEqual(result.branches.get('a')?.warning, 'parent cycle');
     assert.strictEqual(result.branches.get('a')?.source, 'override');
     assert.strictEqual(result.branches.get('d')?.parent, 'a');
+  });
+  test('descendantsOf lists every branch stacked above a branch', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'c']);
+    await commitFile(repo, 'c1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'side', 'main']);
+    await commitFile(repo, 's1.txt');
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.deepStrictEqual([...descendantsOf(result, 'a')].sort(), ['b', 'c']);
   });
 });

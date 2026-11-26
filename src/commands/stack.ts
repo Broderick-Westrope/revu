@@ -1,9 +1,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { mergeParent, planSwitch, pullDefaultBranch, PullResult } from '../branchActions';
-import { git, hasTrackedChanges, listWorktrees } from '../git';
+import { checkedOutBranch, git, hasTrackedChanges, listWorktrees } from '../git';
 import { ReviewState } from '../reviewState';
-import { resetParentOverride, setParentOverride } from '../stack';
+import { descendantsOf, resetParentOverride, setParentOverride } from '../stack';
 import { StackNode } from '../stackTree';
 import { addWorktree } from '../wtp';
 
@@ -231,13 +231,14 @@ export async function compareWithCommand(state: ReviewState): Promise<void> {
     void vscode.window.showInformationMessage('Revu: check out a feature branch to pick its parent.');
     return;
   }
+  const above = descendantsOf(stack, current.branch);
   const names = [stack.trunk.name, ...[...stack.branches.keys()].sort()].filter(
-    (name) => name !== current.branch
+    (name) => name !== current.branch && !above.has(name)
   );
   const picked = await vscode.window.showQuickPick(
     names.map((name) => ({
       label: name,
-      description: name === current.parent ? 'current parent' : name === stack.trunk.name ? 'trunk' : undefined,
+      description: name === current.parent ? 'current parent' : undefined,
     })),
     { placeHolder: `Compare ${current.branch} with…` }
   );
@@ -253,12 +254,12 @@ export async function compareWithCommand(state: ReviewState): Promise<void> {
 }
 
 export async function resetParentCommand(state: ReviewState): Promise<void> {
-  const current = state.snapshot?.stack.current;
-  if (!current) {
+  const branch = await checkedOutBranch(state.repoRoot);
+  if (!branch) {
     return;
   }
   try {
-    await resetParentOverride(state.repoRoot, current.branch);
+    await resetParentOverride(state.repoRoot, branch);
   } catch (err) {
     void vscode.window.showErrorMessage(`Revu: couldn't reset the parent: ${errorText(err)}`);
   }

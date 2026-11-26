@@ -479,6 +479,23 @@ async function isAncestorOrFalse(repoRoot: string, ancestor: string, descendant:
   return isAncestor(repoRoot, ancestor, descendant).catch(() => false);
 }
 
+export function descendantsOf(stack: StackResult, branch: string): Set<string> {
+  const found = new Set<string>();
+  for (const candidate of stack.branches.keys()) {
+    const seen = new Set<string>();
+    let cursor = stack.branches.get(candidate)?.parent;
+    while (cursor !== undefined && !seen.has(cursor)) {
+      if (cursor === branch) {
+        found.add(candidate);
+        break;
+      }
+      seen.add(cursor);
+      cursor = stack.branches.get(cursor)?.parent;
+    }
+  }
+  return found;
+}
+
 export async function setParentOverride(cwd: string, branch: string, parent: string): Promise<void> {
   await git(cwd, ['config', `branch.${branch}.revuParent`, parent]);
 }
