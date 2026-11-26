@@ -249,6 +249,14 @@ suite('branch actions', () => {
 
       assert.deepStrictEqual(result, { kind: 'stayedBehind', reason: 'diverged' });
     });
+    test('a fast-forward blocked by an untracked file is an error, not divergence', async () => {
+      const remote = await cloneWithOrigin();
+      const feature = await linkedWorktree(remote.repo, 'a');
+      await upstreamCommit(remote, 'clash.txt');
+      fs.writeFileSync(path.join(remote.repo, 'clash.txt'), 'local scratch\n');
+
+      await assert.rejects(pullDefaultBranch(feature, 'main'));
+    });
   });
 
   suite('mergeParent', () => {
@@ -269,10 +277,21 @@ suite('branch actions', () => {
     test('merges new parent commits into the branch', async () => {
       const repo = await stacked();
 
-      const result = await mergeParent(repo, onA, 'main');
+      const result = await mergeParent(repo, onA);
 
       assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
       assert.ok(fs.existsSync(path.join(repo, 'a2.txt')));
+    });
+
+    test('refuses when the checked-out branch is no longer the one reviewed', async () => {
+      const repo = await stacked();
+      await git(repo, ['checkout', '-q', 'a']);
+      const before = await rev(repo, 'HEAD');
+
+      const result = await mergeParent(repo, onA);
+
+      assert.deepStrictEqual(result, { kind: 'branchChanged' });
+      assert.strictEqual(await rev(repo, 'HEAD'), before);
     });
 
     test('refuses with tracked changes and changes nothing', async () => {
@@ -280,7 +299,7 @@ suite('branch actions', () => {
       const before = await rev(repo, 'HEAD');
       fs.writeFileSync(path.join(repo, 'b1.txt'), 'edited\n');
 
-      const result = await mergeParent(repo, onA, 'main');
+      const result = await mergeParent(repo, onA);
 
       assert.deepStrictEqual(result, { kind: 'dirty' });
       assert.strictEqual(await rev(repo, 'HEAD'), before);
@@ -288,9 +307,9 @@ suite('branch actions', () => {
 
     test('reports up to date when the parent has nothing new', async () => {
       const repo = await stacked();
-      await mergeParent(repo, onA, 'main');
+      await mergeParent(repo, onA);
 
-      assert.deepStrictEqual(await mergeParent(repo, onA, 'main'), { kind: 'upToDate' });
+      assert.deepStrictEqual(await mergeParent(repo, onA), { kind: 'upToDate' });
     });
 
     test('leaves a conflicting merge in progress', async () => {
@@ -300,7 +319,7 @@ suite('branch actions', () => {
       await git(repo, ['checkout', '-q', 'b']);
       await commitFile(repo, 'shared.txt', 'from b\n');
 
-      const result = await mergeParent(repo, onA, 'main');
+      const result = await mergeParent(repo, onA);
 
       assert.deepStrictEqual(result, { kind: 'conflict' });
       assert.ok(await rev(repo, 'MERGE_HEAD'));
@@ -314,8 +333,7 @@ suite('branch actions', () => {
 
       const result = await mergeParent(
         remote.repo,
-        { branch: 'a', parent: 'main', parentRef: 'origin/main' },
-        'main'
+        { branch: 'a', parent: 'main', parentRef: 'origin/main' }
       );
 
       assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
@@ -326,7 +344,7 @@ suite('branch actions', () => {
       const repo = await stacked();
       await git(repo, ['update-ref', 'refs/revu/checkpoint/b', 'HEAD']);
 
-      const result = await mergeParent(repo, onA, 'main');
+      const result = await mergeParent(repo, onA);
 
       assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: true });
       assert.strictEqual(await rev(repo, 'refs/revu/checkpoint/b'), await rev(repo, 'HEAD'));
@@ -338,7 +356,7 @@ suite('branch actions', () => {
       await commitFile(repo, 'b2.txt');
       await git(repo, ['update-ref', 'refs/revu/checkpoint/b', checkpoint]);
 
-      const result = await mergeParent(repo, onA, 'main');
+      const result = await mergeParent(repo, onA);
 
       assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
       assert.strictEqual(await rev(repo, 'refs/revu/checkpoint/b'), checkpoint);

@@ -182,9 +182,14 @@ export async function mergeParentCommand(state: ReviewState, refresh: Refresh): 
   try {
     const result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Revu: merging ${current.parentRef}` },
-      () => mergeParent(state.repoRoot, current, stack.trunk.name)
+      () => mergeParent(state.repoRoot, current)
     );
     switch (result.kind) {
+      case 'branchChanged':
+        void vscode.window.showWarningMessage(
+          `Revu: ${current.branch} is no longer checked out here, so nothing was merged.`
+        );
+        break;
       case 'dirty':
         void vscode.window.showWarningMessage(
           'Revu: this worktree has tracked changes. Commit them before merging the parent.'
