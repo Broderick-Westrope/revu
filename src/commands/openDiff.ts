@@ -2,7 +2,6 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangedFile } from '../git';
 import { EMPTY_REF, makeGitUri } from '../gitContentProvider';
-import { getActiveScope } from '../scope';
 
 export interface DiffBase {
   repoRoot: string;
@@ -50,15 +49,4 @@ export async function showDiff(
       break;
     }
   }
-}
-
-export async function openDiff(file: ChangedFile | string): Promise<void> {
-  const scope = getActiveScope();
-  if (!scope) {
-    void vscode.window.showErrorMessage('Revu: no active review. Run "Revu: Start Review" first.');
-    return;
-  }
-
-  const changed: ChangedFile = typeof file === 'string' ? { path: file, status: 'M' } : file;
-  await showDiff(changed, scope);
 }

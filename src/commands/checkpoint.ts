@@ -16,7 +16,6 @@ import {
   repoRoot,
   resolveRef,
 } from '../git';
-import { getActiveScope, setActiveScope } from '../scope';
 
 export function expectedOldSha(state: CheckpointState): string | undefined {
   switch (state.kind) {
@@ -50,13 +49,6 @@ async function workspaceRepoRoot(): Promise<string | undefined> {
   }
 }
 
-export function syncCheckpointScope(root: string, branch: string, sha: string): void {
-  const scope = getActiveScope();
-  if (scope?.type === 'checkpoint' && scope.repoRoot === root && scope.branch === branch) {
-    setActiveScope({ ...scope, baseRef: sha });
-  }
-}
-
 async function markSafeAt(
   root: string,
   branch: string,
@@ -70,7 +62,6 @@ async function markSafeAt(
   }
   try {
     await markSafe(root, branch, sha, expected);
-    syncCheckpointScope(root, branch, sha);
     return true;
   } catch (err) {
     const message = (err as Error).message;
@@ -90,8 +81,7 @@ async function markSafeAt(
           );
           return false;
         }
-        syncCheckpointScope(root, branch, sha);
-        return true;
+            return true;
       }
       return false;
     }

@@ -9,7 +9,6 @@ import {
 } from './checkpoint';
 import { ChangedFile, CommitInfo, changedFiles, commitChangedFiles } from './git';
 import { EMPTY_REF } from './gitContentProvider';
-import { onDidChangeScope } from './scope';
 
 export interface CommitNode {
   kind: 'commit';
@@ -329,7 +328,6 @@ export function registerCheckpointTree(
   context.subscriptions.push(
     treeView,
     onGitStateChanged(() => provider.refresh()),
-    onDidChangeScope(() => provider.refresh()),
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (doc.uri.scheme !== 'file') {
         return;

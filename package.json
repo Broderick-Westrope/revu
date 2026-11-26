@@ -22,30 +22,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "revu.startReview",
-        "title": "Revu: Start Review"
-      },
-      {
-        "command": "revu.endReview",
-        "title": "Revu: End Review"
-      },
-      {
         "command": "revu.refreshPrThreads",
         "title": "Revu: Refresh PR Threads"
-      },
-      {
-        "command": "revu.openDiff",
-        "title": "Revu: Open Diff"
-      },
-      {
-        "command": "revu.generateGuide",
-        "title": "Revu: Generate Review Guide",
-        "icon": "$(sparkle)"
-      },
-      {
-        "command": "revu.openGuide",
-        "title": "Revu: Open Review Guide",
-        "icon": "$(open-preview)"
       },
       {
         "command": "revu.createComment",
@@ -98,6 +76,25 @@
         "command": "revu.compareWithWorkingTree",
         "title": "Revu: Compare with Working Tree",
         "icon": "$(edit)"
+      },
+      {
+        "command": "revu.refreshStack",
+        "title": "Revu: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "revu.showSinceCheckpoint",
+        "title": "Revu: Show Changes Since Checkpoint",
+        "icon": "$(milestone)"
+      },
+      {
+        "command": "revu.showAllChanges",
+        "title": "Revu: Show All Branch Changes",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "revu.openChangesFile",
+        "title": "Open Diff"
       }
     ],
     "viewsContainers": {
@@ -112,8 +109,8 @@
     "views": {
       "revu": [
         {
-          "id": "revu.guideView",
-          "name": "Review Guide"
+          "id": "revu.changesView",
+          "name": "Changes"
         },
         {
           "id": "revu.checkpointView",
@@ -123,14 +120,9 @@
     },
     "viewsWelcome": [
       {
-        "view": "revu.guideView",
-        "contents": "Start a review to begin.\n[Start Review](command:revu.startReview)",
-        "when": "!revu.reviewActive"
-      },
-      {
-        "view": "revu.guideView",
-        "contents": "No guide yet for this review.\n[Generate a Guide](command:revu.generateGuide)",
-        "when": "revu.reviewActive"
+        "view": "revu.changesView",
+        "contents": "Open a git repository to review its branch.",
+        "when": "!revu.isGitRepo"
       },
       {
         "view": "revu.checkpointView",
@@ -141,18 +133,19 @@
     "menus": {
       "view/title": [
         {
-          "command": "revu.generateGuide",
+          "command": "revu.showSinceCheckpoint",
           "group": "navigation",
-          "when": "view == revu.guideView"
+          "when": "view == revu.changesView && !revu.checkpointMode"
         },
         {
-          "command": "revu.openGuide",
+          "command": "revu.showAllChanges",
           "group": "navigation",
-          "when": "view == revu.guideView"
+          "when": "view == revu.changesView && revu.checkpointMode"
         },
         {
-          "command": "revu.startReview",
-          "when": "view == revu.guideView"
+          "command": "revu.refreshStack",
+          "group": "navigation",
+          "when": "view == revu.changesView"
         },
         {
           "command": "revu.refreshCheckpoint",
@@ -207,6 +200,10 @@
         {
           "command": "revu.moveCheckpoint",
           "when": "false"
+        },
+        {
+          "command": "revu.openChangesFile",
+          "when": "false"
         }
       ],
       "comments/comment/title": [
@@ -235,31 +232,6 @@
           "when": "commentThread == revuLocal"
         }
       ]
-    },
-    "configuration": {
-      "title": "Revu",
-      "properties": {
-        "revu.agentCommand": {
-          "type": "string",
-          "default": "claude -p",
-          "description": "Agent CLI command used for guide generation. Receives the prompt on stdin. Split on whitespace; executable paths containing spaces are not supported — use a wrapper script."
-        },
-        "revu.agentTimeoutSeconds": {
-          "type": "number",
-          "default": 120,
-          "description": "Minimum timeout for guide generation; the effective timeout scales up with prompt size."
-        },
-        "revu.agentTimeoutMaxSeconds": {
-          "type": "number",
-          "default": 600,
-          "description": "Upper bound for the size-scaled guide generation timeout."
-        },
-        "revu.autoMarkRead": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically mark a guide file as read when opened from the guide."
-        }
-      }
     }
   },
   "scripts": {

@@ -1,11 +1,8 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { refreshPrThreads } from './commands/activateScope';
-import { startReview, endReview } from './commands/startReview';
-import { openDiff } from './commands/openDiff';
-import { generateGuide } from './commands/generateGuide';
-import { quoteComment } from './commands/quoteComment';
-import { registerComments } from './comments/controller';
-import { CommentStore } from './comments/store';
+import { ChangesFileNode, registerChangesTree } from './changesTree';
+import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
+import { registerCheckpointGuard } from './checkpointGuard';
 import {
   markSafeCommand,
   moveCheckpointCommand,
@@ -19,55 +16,70 @@ import {
   openWorkingTreeDiff,
   openWorkingTreeFileDiff,
 } from './commands/checkpointDiff';
-import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
-import { registerCheckpointGuard } from './checkpointGuard';
-import { repoRoot } from './git';
+import { showDiff } from './commands/openDiff';
+import { refreshPrThreads } from './commands/prThreads';
+import { quoteComment } from './commands/quoteComment';
+import { registerComments } from './comments/controller';
+import { CommentStore } from './comments/store';
+import { currentBranch, isDetachedHead, repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { registerGitWatcher } from './gitWatcher';
+import { fetchStackExternal } from './github/gh';
 import { GithubThreadRenderer } from './github/threadRenderer';
-import { GuideCache, guideDisposables } from './guide/cache';
-import { registerGuideTree } from './guide/treeView';
-import { registerGuideWebview } from './guide/webview';
-import { scopeDisposables } from './scope';
+import { ReviewState } from './reviewState';
 
 let checkpointProvider: CheckpointTreeProvider | undefined;
+let reviewState: ReviewState | undefined;
+
+function refreshAfterCheckpointChange(): void {
+  checkpointProvider?.refresh();
+  void reviewState?.refresh({ external: false });
+}
+
+async function setCheckpointMode(on: boolean): Promise<void> {
+  if (!reviewState) {
+    return;
+  }
+  reviewState.setCheckpointMode(on);
+  await vscode.commands.executeCommand('setContext', 'revu.checkpointMode', on);
+  await reviewState.refresh({ external: false });
+}
 
 export function activate(context: vscode.ExtensionContext): void {
-  const guideCache = new GuideCache(context.workspaceState);
   const renderer = new GithubThreadRenderer();
   context.subscriptions.push(
     renderer,
-    ...scopeDisposables(),
-    ...guideDisposables(),
-    vscode.workspace.registerTextDocumentContentProvider(REVU_GIT_SCHEME, new GitContentProvider()),
-    vscode.commands.registerCommand('revu.startReview', () => startReview(renderer)),
-    vscode.commands.registerCommand('revu.endReview', () => endReview(renderer)),
-    vscode.commands.registerCommand('revu.refreshPrThreads', () => refreshPrThreads(renderer)),
-    vscode.commands.registerCommand('revu.openDiff', openDiff),
-    vscode.commands.registerCommand('revu.generateGuide', () => generateGuide(guideCache))
+    vscode.workspace.registerTextDocumentContentProvider(REVU_GIT_SCHEME, new GitContentProvider())
   );
   const store = new CommentStore(context.workspaceState);
   const manager = registerComments(context, store);
   context.subscriptions.push(
     vscode.commands.registerCommand('revu.quoteComment', (comment: vscode.Comment | undefined) =>
       quoteComment(manager, comment)
-    )
-  );
-  const guideStalenessRefresh = registerGuideTree(context, guideCache);
-  registerGuideWebview(context, guideCache);
-  context.subscriptions.push(
+    ),
+    vscode.commands.registerCommand('revu.refreshPrThreads', () =>
+      reviewState
+        ? refreshPrThreads(renderer, reviewState.repoRoot, { announce: true })
+        : undefined
+    ),
+    vscode.commands.registerCommand('revu.refreshStack', () => reviewState?.refresh()),
+    vscode.commands.registerCommand('revu.showSinceCheckpoint', () => setCheckpointMode(true)),
+    vscode.commands.registerCommand('revu.showAllChanges', () => setCheckpointMode(false)),
+    vscode.commands.registerCommand('revu.openChangesFile', (node: ChangesFileNode) =>
+      showDiff(node.file, { repoRoot: node.repoRoot, baseRef: node.baseRef })
+    ),
     vscode.commands.registerCommand('revu.refreshCheckpoint', () => checkpointProvider?.refresh()),
     vscode.commands.registerCommand('revu.markSafe', (node) =>
-      markSafeCommand(node, () => checkpointProvider?.refresh())
+      markSafeCommand(node, refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.moveCheckpoint', (node) =>
-      moveCheckpointCommand(node, () => checkpointProvider?.refresh())
+      moveCheckpointCommand(node, refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.setCheckpoint', () =>
-      setCheckpointCommand(() => checkpointProvider?.refresh())
+      setCheckpointCommand(refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.removeCheckpoint', () =>
-      removeCheckpointCommand(() => checkpointProvider?.refresh())
+      removeCheckpointCommand(refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.openCommitDiff', openCommitDiff),
     vscode.commands.registerCommand('revu.openCommitFileDiff', openCommitFileDiff),
@@ -75,7 +87,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('revu.openWorkingTreeFileDiff', openWorkingTreeFileDiff),
     vscode.commands.registerCommand('revu.compareWithWorkingTree', compareWithWorkingTree)
   );
-  void vscode.commands.executeCommand('setContext', 'revu.reviewActive', false);
+  void vscode.commands.executeCommand('setContext', 'revu.checkpointMode', false);
   void (async () => {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
@@ -91,10 +103,61 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', true);
     const gitStateEvent = registerGitWatcher(context, root);
+    const state = new ReviewState(root, fetchStackExternal);
+    reviewState = state;
+    context.subscriptions.push(state);
+    registerChangesTree(context, state);
     checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
-    registerCheckpointGuard(context, root, gitStateEvent, renderer);
-    context.subscriptions.push(gitStateEvent(guideStalenessRefresh));
+    registerCheckpointGuard(context, root, gitStateEvent);
+    registerReviewRefresh(context, state, gitStateEvent, renderer);
+    await state.refresh();
   })();
+}
+
+function registerReviewRefresh(
+  context: vscode.ExtensionContext,
+  state: ReviewState,
+  gitStateEvent: vscode.Event<void>,
+  renderer: GithubThreadRenderer
+): void {
+  let lastBranch: string | undefined;
+  const branchNow = async (): Promise<string | undefined> =>
+    (await isDetachedHead(state.repoRoot)) ? undefined : currentBranch(state.repoRoot);
+  const refreshFromGit = async (): Promise<void> => {
+    const branch = await branchNow().catch(() => undefined);
+    await state.refresh({ external: branch !== lastBranch });
+  };
+  let saveTimer: NodeJS.Timeout | undefined;
+  context.subscriptions.push(
+    state.onDidChange(() => {
+      const branch = state.snapshot?.stack.current?.branch;
+      if (branch !== lastBranch) {
+        lastBranch = branch;
+        void refreshPrThreads(renderer, state.repoRoot);
+      }
+    }),
+    gitStateEvent(() => void refreshFromGit()),
+    vscode.window.onDidChangeWindowState((windowState) => {
+      if (windowState.focused) {
+        void refreshFromGit();
+      }
+    }),
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      const rel = path.relative(state.repoRoot, doc.uri.fsPath);
+      if (doc.uri.scheme !== 'file' || rel.startsWith('..') || path.isAbsolute(rel)) {
+        return;
+      }
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+      }
+      saveTimer = setTimeout(() => void state.refresh({ external: false }), 1000);
+    }),
+    new vscode.Disposable(() => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+      }
+    })
+  );
 }
 
 export function deactivate(): void {}

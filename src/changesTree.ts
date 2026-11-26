@@ -136,3 +136,26 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
     return item;
   }
 }
+
+export function registerChangesTree(
+  context: vscode.ExtensionContext,
+  state: ReviewState
+): ChangesTreeProvider {
+  let treeView: vscode.TreeView<ChangesNode> | undefined;
+  const provider = new ChangesTreeProvider(
+    state,
+    (message) => {
+      if (treeView) {
+        treeView.message = message;
+      }
+    },
+    (description) => {
+      if (treeView) {
+        treeView.description = description;
+      }
+    }
+  );
+  treeView = vscode.window.createTreeView('revu.changesView', { treeDataProvider: provider });
+  context.subscriptions.push(treeView, state.onDidChange(() => provider.refresh()));
+  return provider;
+}

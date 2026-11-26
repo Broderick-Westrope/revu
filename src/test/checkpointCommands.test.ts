@@ -13,7 +13,6 @@ import {
 import { expectedOldSha, moveCheckpointCommand, staleConflictRef } from '../commands/checkpoint';
 import { CommitNode } from '../checkpointTree';
 import { EMPTY_REF_SHA } from '../git';
-import { clearActiveScope, getActiveScope, setActiveScope } from '../scope';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -71,10 +70,6 @@ function commitNode(repo: string, sha: string, parentSha: string): CommitNode {
 }
 
 suite('checkpoint commands', () => {
-  teardown(() => {
-    clearActiveScope();
-  });
-
   suiteTeardown(() => {
     for (const repo of repos) {
       fs.rmSync(repo, { recursive: true, force: true });
@@ -200,22 +195,6 @@ suite('checkpoint commands', () => {
     await assert.rejects(markSafe(repo, 'feature', c2, expected));
     const refSha = (await git(repo, ['rev-parse', 'refs/revu/checkpoint/feature'])).trim();
     assert.strictEqual(refSha, c4);
-  });
-
-  test('a backwards move follows the active checkpoint scope', async () => {
-    const repo = await makeRepo();
-    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
-    await git(repo, ['checkout', '-b', 'feature']);
-    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
-    await markSafe(repo, 'feature', c3);
-    setActiveScope({ type: 'checkpoint', baseRef: c3, repoRoot: repo, branch: 'feature' });
-    let refreshed = false;
-    await moveCheckpointCommand(commitNode(repo, c2, mainTip), () => {
-      refreshed = true;
-    });
-    assert.strictEqual(refreshed, true);
-    assert.strictEqual(getActiveScope()?.baseRef, c2);
   });
 
   test('moving to a commit not on the current branch leaves the ref and skips refresh', async () => {
