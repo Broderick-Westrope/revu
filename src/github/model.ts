@@ -1,9 +1,21 @@
-export interface PrMetadata {
+export interface PrSummary {
   number: number;
-  title: string;
-  body: string;
-  baseRefName: string;
   url: string;
+  state: 'OPEN' | 'MERGED' | 'CLOSED';
+  headRefName: string;
+  baseRefName: string;
+}
+
+export interface GhStackBranch {
+  name: string;
+  base: string;
+  isMerged: boolean;
+  needsRebase: boolean;
+}
+
+export interface GhStackView {
+  trunk: string;
+  branches: GhStackBranch[];
 }
 
 export interface GhThreadComment {

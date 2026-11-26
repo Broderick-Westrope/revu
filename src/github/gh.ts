@@ -1,11 +1,13 @@
 import { execFile } from 'child_process';
-import { logWarning } from '../log';
-import { GhReviewThread, PrMetadata } from './model';
-import { GhStackView, PrSummary, StackExternal } from '../stack';
+import { logWarningOnce } from '../log';
+import { GhReviewThread, GhStackView, PrSummary } from './model';
+import { StackExternal } from '../stack';
 
-function gh(cwd: string, args: string[]): Promise<string> {
+const QUICK_TIMEOUT_MS = 15000;
+
+function gh(cwd: string, args: string[], timeout = 0): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('gh', args, { cwd, maxBuffer: 64 * 1024 * 1024, timeout: 15000 }, (err, stdout) => {
+    execFile('gh', args, { cwd, maxBuffer: 64 * 1024 * 1024, timeout }, (err, stdout) => {
       if (err) {
         reject(err);
       } else {
@@ -15,30 +17,19 @@ function gh(cwd: string, args: string[]): Promise<string> {
   });
 }
 
-let ghAvailable: boolean | undefined;
-
 export async function isGhAvailable(cwd: string): Promise<boolean> {
-  if (ghAvailable !== undefined) {
-    return ghAvailable;
-  }
   try {
-    await gh(cwd, ['auth', 'status']);
-    ghAvailable = true;
+    await gh(cwd, ['auth', 'status'], QUICK_TIMEOUT_MS);
+    return true;
   } catch {
-    ghAvailable = false;
+    return false;
   }
-  return ghAvailable;
 }
 
-export function resetGhAvailability(): void {
-  ghAvailable = undefined;
-}
-
-export async function fetchPrMetadata(cwd: string, branch?: string): Promise<PrMetadata | undefined> {
+export async function fetchPrNumber(cwd: string, branch: string): Promise<number | undefined> {
   try {
-    const target = branch ? [branch] : [];
-    const output = await gh(cwd, ['pr', 'view', ...target, '--json', 'number,title,body,baseRefName,url']);
-    return JSON.parse(output) as PrMetadata;
+    const output = await gh(cwd, ['pr', 'view', branch, '--json', 'number'], QUICK_TIMEOUT_MS);
+    return (JSON.parse(output) as { number: number }).number;
   } catch {
     return undefined;
   }
@@ -210,14 +201,15 @@ export function parsePrList(json: string): PrSummary[] {
 
 const PR_FIELDS = 'number,url,state,headRefName,baseRefName';
 
-let loggedAuthFailure = false;
+const NOT_IN_A_STACK = 2;
+const STACK_AMBIGUOUS = 6;
 
 function fetchGhStack(cwd: string): Promise<GhStackView | undefined> {
-  return gh(cwd, ['stack', 'view', '--json'])
+  return gh(cwd, ['stack', 'view', '--json'], QUICK_TIMEOUT_MS)
     .then(parseGhStackView)
-    .catch((err: { code?: number; message?: string }) => {
-      if (err.code !== 2 && err.code !== 6) {
-        logWarning(`gh stack view failed: ${err.message ?? String(err)}`);
+    .catch((err: { code?: number | string; message?: string }) => {
+      if (err.code !== NOT_IN_A_STACK && err.code !== STACK_AMBIGUOUS && err.code !== 'ENOENT') {
+        logWarningOnce(`gh stack view failed: ${err.message ?? String(err)}`);
       }
       return undefined;
     });
@@ -226,22 +218,19 @@ function fetchGhStack(cwd: string): Promise<GhStackView | undefined> {
 export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
   const ghStack = fetchGhStack(cwd);
   if (!(await isGhAvailable(cwd))) {
-    if (!loggedAuthFailure) {
-      loggedAuthFailure = true;
-      logWarning('gh auth status failed, so PR data is unavailable. Run `gh auth status` to see why.');
-    }
+    logWarningOnce('gh auth status failed, so PR data is unavailable. Run `gh auth status` to see why.');
     return { prs: [], prsFailed: true, ghStack: await ghStack };
   }
   let prsFailed = false;
   const [list, current] = await Promise.all([
-    gh(cwd, ['pr', 'list', '--state', 'all', '--limit', '200', '--json', PR_FIELDS])
+    gh(cwd, ['pr', 'list', '--state', 'all', '--limit', '200', '--json', PR_FIELDS], QUICK_TIMEOUT_MS)
       .then(parsePrList)
       .catch((err: Error) => {
         prsFailed = true;
-        logWarning(`gh pr list failed: ${err.message}`);
+        logWarningOnce(`gh pr list failed: ${err.message}`);
         return [] as PrSummary[];
       }),
-    gh(cwd, ['pr', 'view', '--json', PR_FIELDS])
+    gh(cwd, ['pr', 'view', '--json', PR_FIELDS], QUICK_TIMEOUT_MS)
       .then((out) => parsePrList(`[${out}]`))
       .catch(() => [] as PrSummary[]),
   ]);

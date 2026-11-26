@@ -9,26 +9,7 @@ import {
   listWorktrees,
   resolveRef,
 } from './git';
-
-export interface PrSummary {
-  number: number;
-  url: string;
-  state: 'OPEN' | 'MERGED' | 'CLOSED';
-  headRefName: string;
-  baseRefName: string;
-}
-
-export interface GhStackBranch {
-  name: string;
-  base: string;
-  isMerged: boolean;
-  needsRebase: boolean;
-}
-
-export interface GhStackView {
-  trunk: string;
-  branches: GhStackBranch[];
-}
+import { GhStackView, PrSummary } from './github/model';
 
 export interface StackExternal {
   prs: PrSummary[];

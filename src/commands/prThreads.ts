@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { checkedOutBranch } from '../git';
-import { fetchPrMetadata, fetchReviewThreads, isGhAvailable, resetGhAvailability } from '../github/gh';
+import { fetchPrNumber, fetchReviewThreads, isGhAvailable } from '../github/gh';
 import { GithubThreadRenderer } from '../github/threadRenderer';
+import { logWarning } from '../log';
 
 export async function refreshPrThreads(
   renderer: GithubThreadRenderer,
@@ -9,29 +10,31 @@ export async function refreshPrThreads(
   options: { announce?: boolean } = {}
 ): Promise<void> {
   renderer.clear();
-  resetGhAvailability();
   try {
     const branch = await checkedOutBranch(repoRoot);
     if (!branch || !(await isGhAvailable(repoRoot))) {
       return;
     }
-    const meta = await fetchPrMetadata(repoRoot, branch);
-    if (!meta) {
+    const prNumber = await fetchPrNumber(repoRoot, branch);
+    if (prNumber === undefined) {
       return;
     }
-    const threads = await fetchReviewThreads(repoRoot, meta.number);
+    const threads = await fetchReviewThreads(repoRoot, prNumber);
     if ((await checkedOutBranch(repoRoot)) !== branch) {
       return;
     }
     const { shown, skipped } = renderer.renderThreads(repoRoot, threads);
     if (options.announce) {
       void vscode.window.showInformationMessage(
-        `Revu: PR #${meta.number}: ${shown} threads shown, ${skipped} skipped (outdated).`
+        `Revu: PR #${prNumber}: ${shown} threads shown, ${skipped} skipped (outdated).`
       );
     }
   } catch (err) {
-    void vscode.window.showWarningMessage(
-      `Revu: could not load GitHub PR data: ${(err as Error).message}`
-    );
+    const message = `could not load GitHub PR threads: ${(err as Error).message}`;
+    if (options.announce) {
+      void vscode.window.showWarningMessage(`Revu: ${message}`);
+    } else {
+      logWarning(message);
+    }
   }
 }
