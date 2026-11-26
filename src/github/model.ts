@@ -33,3 +33,10 @@ export interface GhReviewThread {
   diffHunk: string;
   comments: GhThreadComment[];
 }
+
+export interface StackExternal {
+  prs: PrSummary[];
+  prsFailed?: boolean;
+  ghStackFailed?: boolean;
+  ghStack?: GhStackView;
+}

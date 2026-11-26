@@ -270,3 +270,27 @@ suite('review state PR data', () => {
     fs.rmSync(repo, { recursive: true, force: true });
   });
 });
+
+suite('review state gh stack data', () => {
+  test('a failed gh stack read keeps the last good stack', async () => {
+    const repo = await makeStack();
+    await commitFile(repo, 'first.txt');
+    const ghStack = {
+      trunk: 'main',
+      branches: [
+        { name: 'a', base: '', isMerged: false, needsRebase: false },
+        { name: 'b', base: '', isMerged: false, needsRebase: false },
+      ],
+    };
+    let calls = 0;
+    const state = new ReviewState(repo, async () => {
+      calls++;
+      return calls === 1 ? { prs: [], ghStack } : { prs: [], ghStackFailed: true };
+    });
+    await state.refresh({ external: true });
+    await state.refresh({ external: true });
+
+    assert.strictEqual(state.snapshot?.stack.current?.source, 'gh-stack');
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+});

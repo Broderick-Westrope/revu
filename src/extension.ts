@@ -44,6 +44,11 @@ function refreshAfterCheckpointChange(): void {
   void reviewState?.refresh();
 }
 
+function currentPr(state: ReviewState): { branch: string; number: number } | undefined {
+  const current = state.snapshot?.stack.current;
+  return current?.pr ? { branch: current.branch, number: current.pr.number } : undefined;
+}
+
 function withState<T extends unknown[]>(
   action: (state: ReviewState, ...args: T) => Promise<void>
 ): (...args: T) => Promise<void> | undefined {
@@ -73,7 +78,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand(
       'revu.refreshPrThreads',
-      withState((state) => refreshPrThreads(renderer, state.repoRoot, { announce: true }))
+      withState((state) =>
+        refreshPrThreads(renderer, state.repoRoot, currentPr(state), { announce: true })
+      )
     ),
     vscode.commands.registerCommand(
       'revu.refreshStack',
@@ -188,6 +195,7 @@ function registerReviewRefresh(
   store: CommentStore
 ): void {
   let lastBranch: string | undefined;
+  let lastPrKey: string | undefined;
   const branchNow = (): Promise<string | undefined> => checkedOutBranch(state.repoRoot);
   const refreshFromGit = async (): Promise<void> => {
     const branch = await branchNow().catch(() => undefined);
@@ -212,7 +220,12 @@ function registerReviewRefresh(
       if (branch !== lastBranch) {
         lastBranch = branch;
         void store.setBranch(branch);
-        void refreshPrThreads(renderer, state.repoRoot);
+      }
+      const pr = currentPr(state);
+      const prKey = pr ? `${pr.branch}#${pr.number}` : undefined;
+      if (prKey !== lastPrKey) {
+        lastPrKey = prKey;
+        void refreshPrThreads(renderer, state.repoRoot, pr);
       }
     }),
     gitStateEvent(() => void refreshFromGit()),

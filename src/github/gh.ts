@@ -1,38 +1,11 @@
-import { execFile } from 'child_process';
+import { run } from '../exec';
 import { logWarningOnce } from '../log';
-import { GhReviewThread, GhStackView, PrSummary } from './model';
-import { StackExternal } from '../stack';
+import { GhReviewThread, GhStackView, PrSummary, StackExternal } from './model';
 
 const QUICK_TIMEOUT_MS = 15000;
 
 function gh(cwd: string, args: string[], timeout = 0): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('gh', args, { cwd, maxBuffer: 64 * 1024 * 1024, timeout }, (err, stdout) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(stdout);
-      }
-    });
-  });
-}
-
-export async function isGhAvailable(cwd: string): Promise<boolean> {
-  try {
-    await gh(cwd, ['auth', 'status'], QUICK_TIMEOUT_MS);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function fetchPrNumber(cwd: string, branch: string): Promise<number | undefined> {
-  try {
-    const output = await gh(cwd, ['pr', 'view', branch, '--json', 'number'], QUICK_TIMEOUT_MS);
-    return (JSON.parse(output) as { number: number }).number;
-  } catch {
-    return undefined;
-  }
+  return run('gh', args, { cwd, timeout });
 }
 
 const REVIEW_THREADS_QUERY = `query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
@@ -145,7 +118,7 @@ export function parseThreadsResponse(json: string): GhReviewThread[] {
 }
 
 export async function fetchReviewThreads(cwd: string, prNumber: number): Promise<GhReviewThread[]> {
-  const repoJson = await gh(cwd, ['repo', 'view', '--json', 'nameWithOwner']);
+  const repoJson = await gh(cwd, ['repo', 'view', '--json', 'nameWithOwner'], QUICK_TIMEOUT_MS);
   const nameWithOwner = (JSON.parse(repoJson) as { nameWithOwner: string }).nameWithOwner;
   const [owner, repo] = nameWithOwner.split('/');
   const output = await gh(cwd, [
@@ -164,15 +137,8 @@ export async function fetchReviewThreads(cwd: string, prNumber: number): Promise
   return parseThreadsResponse(output);
 }
 
-interface RawStackBranch {
-  name: string;
-  base: string;
-  isMerged: boolean;
-  needsRebase: boolean;
-}
-
 export function parseGhStackView(json: string): GhStackView {
-  const raw = JSON.parse(json) as { trunk: string; branches: RawStackBranch[] };
+  const raw = JSON.parse(json) as GhStackView;
   return {
     trunk: raw.trunk,
     branches: raw.branches.map((b) => ({
@@ -187,9 +153,9 @@ export function parseGhStackView(json: string): GhStackView {
 const PR_STATES = new Set(['OPEN', 'MERGED', 'CLOSED']);
 
 export function parsePrList(json: string): PrSummary[] {
-  const raw = JSON.parse(json) as PrSummary[];
+  const raw = JSON.parse(json) as (PrSummary & { isCrossRepository?: boolean })[];
   return raw
-    .filter((pr) => PR_STATES.has(pr.state))
+    .filter((pr) => PR_STATES.has(pr.state) && !pr.isCrossRepository)
     .map((pr) => ({
       number: pr.number,
       url: pr.url,
@@ -199,35 +165,38 @@ export function parsePrList(json: string): PrSummary[] {
     }));
 }
 
-const PR_FIELDS = 'number,url,state,headRefName,baseRefName';
+const PR_FIELDS = 'number,url,state,headRefName,baseRefName,isCrossRepository';
 
 const NOT_IN_A_STACK = 2;
 const STACK_AMBIGUOUS = 6;
 
-function fetchGhStack(cwd: string): Promise<GhStackView | undefined> {
-  return gh(cwd, ['stack', 'view', '--json'], QUICK_TIMEOUT_MS)
-    .then(parseGhStackView)
-    .catch((err: { code?: number | string; message?: string }) => {
-      if (err.code !== NOT_IN_A_STACK && err.code !== STACK_AMBIGUOUS && err.code !== 'ENOENT') {
-        logWarningOnce(`gh stack view failed: ${err.message ?? String(err)}`);
-      }
-      return undefined;
-    });
+async function fetchGhStack(cwd: string): Promise<Pick<StackExternal, 'ghStack' | 'ghStackFailed'>> {
+  try {
+    return { ghStack: parseGhStackView(await gh(cwd, ['stack', 'view', '--json'], QUICK_TIMEOUT_MS)) };
+  } catch (err) {
+    const { code, message, stderr } = err as { code?: number | string; message?: string; stderr?: string };
+    const notApplicable =
+      code === NOT_IN_A_STACK ||
+      code === STACK_AMBIGUOUS ||
+      code === 'ENOENT' ||
+      /unknown command/i.test(stderr ?? '');
+    if (notApplicable) {
+      return {};
+    }
+    logWarningOnce(`gh stack view failed: ${stderr?.trim() || message || String(err)}`);
+    return { ghStackFailed: true };
+  }
 }
 
 export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
-  const ghStack = fetchGhStack(cwd);
-  if (!(await isGhAvailable(cwd))) {
-    logWarningOnce('gh auth status failed, so PR data is unavailable. Run `gh auth status` to see why.');
-    return { prs: [], prsFailed: true, ghStack: await ghStack };
-  }
+  const stack = fetchGhStack(cwd);
   let prsFailed = false;
   const [list, current] = await Promise.all([
     gh(cwd, ['pr', 'list', '--state', 'all', '--limit', '200', '--json', PR_FIELDS], QUICK_TIMEOUT_MS)
       .then(parsePrList)
-      .catch((err: Error) => {
+      .catch((err: Error & { stderr?: string }) => {
         prsFailed = true;
-        logWarningOnce(`gh pr list failed: ${err.message}`);
+        logWarningOnce(`gh pr list failed: ${err.stderr?.trim() || err.message}`);
         return [] as PrSummary[];
       }),
     gh(cwd, ['pr', 'view', '--json', PR_FIELDS], QUICK_TIMEOUT_MS)
@@ -235,5 +204,5 @@ export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
       .catch(() => [] as PrSummary[]),
   ]);
   const prs = [...current, ...list.filter((pr) => !current.some((c) => c.number === pr.number))];
-  return { prs, prsFailed, ghStack: await ghStack };
+  return { prs, prsFailed, ...(await stack) };
 }

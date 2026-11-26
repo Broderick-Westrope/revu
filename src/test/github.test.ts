@@ -237,6 +237,14 @@ suite('github stack and PR list parsing', () => {
     });
   });
 
+  test('drops PRs opened from forks so a same-named local branch is not matched', () => {
+    const json = JSON.stringify([
+      { number: 8, url: 'u8', state: 'OPEN', headRefName: 'main', baseRefName: 'main', isCrossRepository: true },
+    ]);
+
+    assert.deepStrictEqual(parsePrList(json), []);
+  });
+
   test('parses gh pr list JSON and drops unknown states', () => {
     const json = JSON.stringify([
       { number: 4, url: 'u4', state: 'OPEN', headRefName: 'b', baseRefName: 'a' },

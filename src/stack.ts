@@ -10,13 +10,9 @@ import {
   mergeBase,
   resolveRef,
 } from './git';
-import { GhStackView, PrSummary } from './github/model';
+import { PrSummary, StackExternal } from './github/model';
 
-export interface StackExternal {
-  prs: PrSummary[];
-  prsFailed?: boolean;
-  ghStack?: GhStackView;
-}
+export { StackExternal };
 
 export type ParentSource = 'override' | 'gh-stack' | 'pr' | 'inferred' | 'trunk';
 

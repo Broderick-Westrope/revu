@@ -50,7 +50,11 @@ export class ReviewState {
       if (!next.prsFailed) {
         this.hasPrData = true;
       }
-      this.external = next.prsFailed ? { ...next, prs: this.external.prs } : next;
+      this.external = {
+        ...next,
+        prs: next.prsFailed ? this.external.prs : next.prs,
+        ghStack: next.ghStackFailed ? this.external.ghStack : next.ghStack,
+      };
       await this.resolve();
     }
   }
