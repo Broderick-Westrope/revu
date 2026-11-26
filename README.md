@@ -1,6 +1,6 @@
 # Revu
 
-Guided code review and local review comments, inside VS Code and Cursor.
+Branch-aware code review and local review comments, inside VS Code and Cursor.
 
 ![demo](https://raw.githubusercontent.com/Broderick-Westrope/revu/refs/heads/master/media/demo.gif)
 
@@ -10,14 +10,14 @@ This is a personal tool built around one specific review flow. AI review is alre
 
 When I sit down to review a PR (mine or someone else's), the flow looks like this:
 
-1. **Get oriented.** Before reading any code, I want guidance on how to approach the review: which files form the core of the change, which are supporting noise, and what order to read them in.
+1. **Get oriented.** Before reading any code, I want to see where the branch sits (what it's stacked on, whether it has a PR) and exactly what it changes, without upstream commits or lower layers of a stack mixed in.
 2. **Read and annotate.** As I work through the diffs, I leave comments on the code. These aren't PR comments; they're questions, doubts, and things I want to verify. They belong to me, not the thread.
 3. **Collaborate with the agent.** I hand those comments to the agent in my terminal to answer the questions, validate my understanding, and dig into anything suspicious.
 4. **Finalise on GitHub.** Whatever survives that conversation becomes actual PR feedback, left via the official [GitHub Pull Requests](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-pull-request-github) extension as usual.
 
 Steps 1–3 had no good home. The pieces existed, but spread across three tools in three different places:
 
-- [Linear's guided reviews](https://linear.app/docs/diffs#guides) do the orientation step beautifully, but only for PRs, and only in Linear.
+- [GitLens](https://www.gitkraken.com/gitlens) compares a branch with anything, but has no idea which branch it's stacked on, and every comparison is set up by hand.
 - [pair-review](https://github.com/in-the-loop-labs/pair-review) reviews local changes with AI assistance, but in a browser, outside the editor.
 - [comment-renderer](https://marketplace.visualstudio.com/items?itemName=statiolake.vscode-comment-renderer) exports editor comments as markdown for agents, but without diff scopes or review guidance.
 
@@ -25,16 +25,28 @@ Revu is those three ideas rebuilt as one extension, in the editor where the revi
 
 ## How it works
 
-1. **Start a review** — `Revu: Start Review`, pick a scope: working tree vs HEAD (untracked files included), current branch vs merge-base with the default branch, or since checkpoint — everything after the last commit you marked as reviewed on this branch. No push or PR needed for your own work. If the branch does have an open PR, Revu fetches its metadata and review threads via `gh`.
-2. **Generate a guide** — `Revu: Generate Review Guide` sends the diff to your agent CLI (default `claude -p`) and opens the guide in an editor tab: overall summary, themed sections in suggested review order, attention notes, and clickable file rows. Files open as native diffs in the adjacent editor group, jumping straight to the lines the note references. Mark files read as you go. The sidebar tree mirrors the sections for quick navigation.
-3. **Leave comments** — use the native commenting UI (the `+` in the gutter) on any line or range. Comments persist per workspace and never leave your machine. Existing GitHub threads render inline read-only, and you can quote one into a local comment when you want to discuss someone's feedback with the agent.
-4. **Hand off to the agent** — `Revu: Copy All Comments` puts the full set on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads, your notes. Paste it into your preferred agent ([anvil](https://github.com/Broderick-Westrope/anvil) for me) and work through it together.
+Revu always reviews the checked-out branch against its parent, so there's nothing to start. The parent is the branch below it in a stack, or `origin/<default>` when it has none. Diffs start at the merge-base with the parent, so new commits on the parent and a stale local `main` never show up.
 
-Guides are cached per scope and flagged stale when the changed-file set drifts, so reopening a review is instant.
+The parent is picked in this order, and the Changes view title says which one won (for example `vs feat/port (inferred)`):
+
+1. An override you set with `Revu: Compare With…` (stored as `branch.<name>.revuParent` in git config; `Revu: Reset Parent` removes it).
+2. The layer below it in a `gh stack`.
+3. The base of its open PR.
+4. The branch it was created from, read from git's branch reflog, falling back to the nearest branch it forked from.
+5. `origin/<default>`.
+
+The sidebar has three views:
+
+1. **Stack** shows the current branch's chain of parents down to trunk and the branches stacked on top of it, with each one's PR, commits ahead of and behind its parent, and whether a gh stack says it needs a rebase. Switch on a row checks the branch out in place (when your worktree has no tracked changes), opens its worktree in this window, or offers to create one with `wtp`. The title bar has Pull Default Branch (fetch, then fast-forward the root worktree when it's clean) and Merge Parent (hidden for gh-stack branches, where restacking is the tool).
+2. **Changes** lists the files changed on this branch against its parent, including uncommitted and untracked files, as a folder tree. Files open as native diffs with the live file on the right. The milestone button narrows the list to changes since the branch's checkpoint.
+3. **Leave comments** with the native commenting UI (the `+` in the gutter). Comments are kept per branch and never leave your machine. GitHub threads for the branch's own PR render inline read-only, and you can quote one into a local comment.
+4. **Hand off to the agent** with `Revu: Copy All Comments`, which puts the branch's comments on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads and your notes.
+
+Changes made outside the editor (an agent committing in another worktree, a fetch, a checkpoint moved from the terminal) show up when the window regains focus.
 
 ### Checkpoints
 
-The Checkpoint view in the Revu sidebar tracks what you've already reviewed on the current branch. It lists the unreviewed commits since the checkpoint (a per-branch ref, defaulting to the merge-base with the default branch) plus all unreviewed changes against the working tree. Marking a commit safe (the check action on a commit row) advances the checkpoint past it. Reviewed commits stay visible below the unreviewed ones with a check icon, the checkpoint boundary is marked with a milestone icon, and "Move Checkpoint Here" (the inline action on a reviewed commit) moves the checkpoint backwards, returning later commits to the unreviewed state. `Revu: Set Checkpoint` picks an arbitrary commit; `Revu: Remove Checkpoint` falls back to the merge-base. When reading a commit diff you can jump to how that file looks now via `Revu: Compare with Working Tree` (editor title or the commit file's context menu) — useful when a later commit already reworked the code you're reading.
+The Checkpoint view tracks what you've already reviewed on the current branch. It lists the commits after the checkpoint (a per-branch ref, defaulting to the merge-base with the branch's parent). Marking a commit safe (the check action on a commit row) advances the checkpoint past it. Reviewed commits stay visible below with a check icon, the checkpoint is marked with a milestone icon, and Move Checkpoint Here moves it backwards. Merge commits show only what the merge changed beyond an automatic merge of its parents. `Revu: Set Checkpoint` picks any commit; `Revu: Remove Checkpoint` falls back to the merge-base. From a commit diff, `Revu: Compare with Working Tree` shows how that file looks now.
 
 ## Read-only by design
 
@@ -43,39 +55,34 @@ Revu never writes to GitHub. No replies, no review submission, no mutations of a
 ## Requirements
 
 - `git` on PATH.
-- An agent CLI for guide generation (`claude`, or anything that reads a prompt on stdin and prints a response). Only needed for guides; comments work without it.
-- `gh` (authenticated) for PR metadata and threads. Optional; without it Revu just skips the GitHub context.
+- `gh` (authenticated) for PR state and threads. Optional; without it Revu skips the GitHub context and finds parents from git alone.
+- The `gh stack` extension, optional, for exact parents of gh-stack layers.
+- `wtp` on the PATH VS Code sees, only for Create Worktree.
 
 ## Commands
 
-| Command                          | What it does                                                                            |
-| -------------------------------- | --------------------------------------------------------------------------------------- |
-| `Revu: Start Review`             | Pick a scope and begin a review session.                                                |
-| `Revu: End Review`               | Clear the session and any rendered PR threads.                                          |
-| `Revu: Generate Review Guide`    | Generate (or regenerate) the guide for the active scope.                                |
-| `Revu: Open Guide`               | Open the guide panel for the cached guide.                                              |
-| `Revu: Refresh PR Threads`       | Re-fetch GitHub review threads for the current branch's PR.                             |
-| `Revu: Copy All Comments`        | Export every local comment as markdown to the clipboard.                                |
-| `Revu: Clear All Comments`       | Delete all local comments (with confirmation).                                          |
-| `Revu: Set Checkpoint`           | Pick the commit everything up to which counts as reviewed on this branch.               |
-| `Revu: Remove Checkpoint`        | Delete the branch's checkpoint ref; unreviewed state falls back to the merge-base.      |
-| `Revu: Refresh Checkpoint View`  | Manually re-read git state for the Checkpoint view.                                     |
-| `Revu: Compare with Working Tree`| From a commit diff, show the same file against the current working tree.                |
+| Command | What it does |
+| --- | --- |
+| `Revu: Refresh` | Re-read git state and PR data for the Stack and Changes views. |
+| `Revu: Pull Default Branch` | Fetch `origin`, then fast-forward the root worktree when it's on the default branch and clean. |
+| `Revu: Merge Parent` | Merge the branch's parent into it. Refuses with uncommitted tracked changes; leaves conflicts for the merge editor. |
+| `Revu: Compare With…` | Pick the branch's parent yourself. |
+| `Revu: Reset Parent` | Remove that choice and go back to the resolved parent. |
+| `Revu: Show Changes Since Checkpoint` / `Revu: Show All Branch Changes` | Toggle the Changes view's checkpoint mode. |
+| `Revu: Refresh PR Threads` | Re-fetch GitHub review threads for the branch's PR. |
+| `Revu: Copy All Comments as Markdown` | Export the branch's local comments to the clipboard. |
+| `Revu: Clear All Comments` | Delete the branch's local comments (with confirmation). |
+| `Revu: Set Checkpoint` | Pick the commit everything up to which counts as reviewed on this branch. |
+| `Revu: Remove Checkpoint` | Delete the branch's checkpoint ref. |
+| `Revu: Refresh Checkpoint View` | Re-read git state for the Checkpoint view. |
+| `Revu: Compare with Working Tree` | From a commit diff, show the same file against the working tree. |
 
-Per-thread actions (copy one comment, delete, quote a GitHub comment) live on the comment thread's title bar. Marking a commit safe is an inline action on commit rows in the Checkpoint view.
-
-## Settings
-
-| Setting                       | Default     | Description                                                                                                                                                                              |
-| ----------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `revu.agentCommand`           | `claude -p` | Agent CLI command used for guide generation; receives the prompt on stdin.                                                                                                               |
-| `revu.agentTimeoutSeconds`    | `120`       | Minimum timeout for guide generation. The effective timeout scales with prompt size (`60 + promptChars / 1000` seconds, clamped between this minimum and `revu.agentTimeoutMaxSeconds`). |
-| `revu.agentTimeoutMaxSeconds` | `600`       | Upper bound for the size-scaled guide generation timeout.                                                                                                                                |
-| `revu.autoMarkRead`           | `false`     | Automatically mark a guide file as read when opened from the guide. Files can always be toggled manually with the control at the end of each row.                                        |
+Switch, Open in New Window and Open PR are inline actions on Stack rows. Per-thread actions (copy one comment, delete, quote a GitHub comment) live on the comment thread's title bar. Mark Safe and Move Checkpoint Here are inline actions on commit rows.
 
 ## Known limitations
 
-- Guide staleness is recomputed on file save, review scope changes, and git ref changes (a watcher on the git reflog catches commits, rebases, and checkouts made in a terminal). Non-git file changes made outside VS Code (e.g. terminal `touch`/`rm`) aren't detected until a save inside the editor or a manual refresh (regenerating the guide or restarting the review).
+- Parent inference reads where each branch was created from git's reflog, which git expires after 90 days by default; older branches fall back to guessing from history, and the Changes view marks the guess as ambiguous.
+- Ahead and behind counts are relative to your last fetch. Revu only fetches in Pull Default Branch and Merge Parent.
+- PR state comes from the 200 most recent PRs in the repo, plus the current branch's own PR, so an old branch other than the current one may show "no PR".
 - Comment anchors are line-based and may drift when files are edited. GitHub PR threads are anchored naively to their recorded lines, so they can be misplaced if your working tree has drifted from the PR head; each thread carries its diff hunk so the context survives either way.
-- `revu.agentCommand` is split on whitespace; executable paths containing spaces are not supported. Use a wrapper script.
 - PRs with more than 50 review threads may not fully render on `gh` versions older than 2.33, and threads with more than 50 comments are truncated.
