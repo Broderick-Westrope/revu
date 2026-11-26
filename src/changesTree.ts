@@ -126,7 +126,7 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
       vscode.TreeItemCollapsibleState.None
     );
     item.resourceUri = vscode.Uri.file(path.join(element.repoRoot, element.file.path));
-    item.description = element.file.status;
+    item.description = element.file.status === 'X' ? 'conflict' : element.file.status;
     item.contextValue = 'revu.changesFile';
     item.command = {
       command: 'revu.openChangesFile',

@@ -5,6 +5,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { markSafe } from '../checkpoint';
 import { ChangesNode, ChangesTreeProvider } from '../changesTree';
+import * as vscode from 'vscode';
+import { showDiff } from '../commands/openDiff';
+import { GitUriQuery } from '../gitContentProvider';
 import { ReviewState } from '../reviewState';
 
 function git(cwd: string, args: string[]): Promise<string> {
@@ -131,5 +134,46 @@ suite('changes tree provider', () => {
     await provider.getChildren();
 
     assert.strictEqual(captured.description, 'on trunk');
+  });
+
+  test('a conflicted file row shows conflict as its description', async () => {
+    const repo = await makeStack();
+    await git(repo, ['config', 'rerere.enabled', 'false']);
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'b side\n');
+    await git(repo, ['commit', '-am', 'b edits a.txt']);
+    await git(repo, ['checkout', '-q', 'a']);
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'a side\n');
+    await git(repo, ['commit', '-am', 'a edits a.txt']);
+    await git(repo, ['checkout', '-q', 'b']);
+    await assert.rejects(git(repo, ['merge', '--no-edit', 'a']));
+    const { provider } = await setup(repo);
+
+    const file = (await provider.getChildren()).find(
+      (n) => n.kind === 'file' && n.file.path === 'a.txt'
+    );
+
+    assert.ok(file);
+    assert.strictEqual(provider.getTreeItem(file).description, 'conflict');
+  });
+
+  test('opening a conflicted file diffs it against the base like a modification', async () => {
+    const repo = await makeStack();
+    await git(repo, ['config', 'rerere.enabled', 'false']);
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'b side\n');
+    await git(repo, ['commit', '-am', 'b edits a.txt']);
+    await git(repo, ['checkout', '-q', 'a']);
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'a side\n');
+    await git(repo, ['commit', '-am', 'a edits a.txt']);
+    await git(repo, ['checkout', '-q', 'b']);
+    await assert.rejects(git(repo, ['merge', '--no-edit', 'a']));
+    const base = (await git(repo, ['merge-base', 'HEAD', 'MERGE_HEAD'])).trim();
+
+    await showDiff({ path: 'a.txt', status: 'X' }, { repoRoot: repo, baseRef: base });
+
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    assert.ok(input instanceof vscode.TabInputTextDiff);
+    assert.strictEqual(input.modified.fsPath, path.join(repo, 'a.txt'));
+    assert.strictEqual((JSON.parse(input.original.query) as GitUriQuery).ref, base);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   });
 });

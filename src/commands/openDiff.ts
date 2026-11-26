@@ -28,6 +28,15 @@ export async function showDiff(
         options
       );
       break;
+    case 'X':
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        makeGitUri(repoRoot, baseRef, changed.oldPath ?? changed.path),
+        fileUri(changed.path),
+        `${path.basename(changed.path)} (conflict)`,
+        options
+      );
+      break;
     case 'D':
       await vscode.commands.executeCommand(
         'vscode.diff',
