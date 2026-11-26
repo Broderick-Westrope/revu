@@ -32,7 +32,10 @@ export type CheckpointState =
   | { kind: 'orphaned'; branch: string; sha: string }
   | { kind: 'detached' };
 
-export async function getCheckpointState(repoRoot: string): Promise<CheckpointState> {
+export async function getCheckpointState(
+  repoRoot: string,
+  implicitBase?: string
+): Promise<CheckpointState> {
   if (await isDetachedHead(repoRoot)) {
     return { kind: 'detached' };
   }
@@ -46,14 +49,18 @@ export async function getCheckpointState(repoRoot: string): Promise<CheckpointSt
     return { kind: 'orphaned', branch, sha };
   }
   let base: string;
-  try {
-    const def = await defaultBranch(repoRoot);
-    if (branch === def) {
-      return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
+  if (implicitBase) {
+    base = implicitBase;
+  } else {
+    try {
+      const def = await defaultBranch(repoRoot);
+      if (branch === def) {
+        return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
+      }
+      base = await mergeBase(repoRoot, branchRef(def));
+    } catch {
+      return { kind: 'needsInit', branch, reason: 'noDefaultBranch' };
     }
-    base = await mergeBase(repoRoot, branchRef(def));
-  } catch {
-    return { kind: 'needsInit', branch, reason: 'noDefaultBranch' };
   }
   const branchTip = await resolveRef(repoRoot, branchRef(branch));
   if (base === branchTip) {
@@ -92,15 +99,20 @@ export interface ReviewedCommits {
 
 export async function reviewedCommits(
   repoRoot: string,
-  checkpointSha: string
+  checkpointSha: string,
+  implicitBase?: string
 ): Promise<ReviewedCommits> {
   let range = checkpointSha;
-  try {
-    const def = await defaultBranch(repoRoot);
-    const base = await mergeBase(repoRoot, branchRef(def));
-    range = `${base}..${checkpointSha}`;
-  } catch {
-    // no default branch → fall back to listing from the checkpoint
+  if (implicitBase) {
+    range = `${implicitBase}..${checkpointSha}`;
+  } else {
+    try {
+      const def = await defaultBranch(repoRoot);
+      const base = await mergeBase(repoRoot, branchRef(def));
+      range = `${base}..${checkpointSha}`;
+    } catch {
+      // no default branch → fall back to listing from the checkpoint
+    }
   }
   const commits = await listCommits(repoRoot, range, REVIEWED_COMMITS_CAP + 1);
   return {

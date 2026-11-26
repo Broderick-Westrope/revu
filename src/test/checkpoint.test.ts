@@ -66,6 +66,36 @@ suite('checkpoint state', () => {
     assert.deepStrictEqual(state, { kind: 'implicit', branch: 'feature', sha: mainTip });
   });
 
+  test('implicit state uses the given parent diff base instead of the default branch', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'parent']);
+    const parentTip = await commitFile(repo, 'p.txt', 'parent\n');
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const state = await getCheckpointState(repo, parentTip);
+    assert.deepStrictEqual(state, { kind: 'implicit', branch: 'feature', sha: parentTip });
+  });
+
+  test('needsInit when the given parent diff base equals the branch tip', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'feature']);
+    const tip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    const state = await getCheckpointState(repo, tip);
+    assert.deepStrictEqual(state, {
+      kind: 'needsInit',
+      branch: 'feature',
+      reason: 'onDefaultBranch',
+    });
+  });
+
+  test('implicit state on trunk uses the given base below unpushed commits', async () => {
+    const repo = await makeRepo();
+    const pushed = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await commitFile(repo, 'local.txt', 'local\n');
+    const state = await getCheckpointState(repo, pushed);
+    assert.deepStrictEqual(state, { kind: 'implicit', branch: 'main', sha: pushed });
+  });
+
   test('explicit state after markSafe', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
@@ -309,6 +339,19 @@ suite('reviewed range', () => {
     assert.deepStrictEqual(
       commits.map((c) => c.sha),
       [c3, c2]
+    );
+  });
+
+  test('reviewedCommits lists from the given parent diff base', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'parent']);
+    const parentTip = await commitFile(repo, 'p.txt', 'parent\n');
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const { commits } = await reviewedCommits(repo, c2, parentTip);
+    assert.deepStrictEqual(
+      commits.map((c) => c.sha),
+      [c2]
     );
   });
 
