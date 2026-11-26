@@ -45,3 +45,32 @@ export async function aheadBehind(
   const [behind, ahead] = output.trim().split(/\s+/).map(Number);
   return { ahead, behind };
 }
+
+export interface SwitchInput {
+  target: string;
+  trunk: string;
+  current?: string;
+  currentWorktree: string;
+  worktrees: Worktrees;
+  dirty: boolean;
+}
+
+export type SwitchPlan =
+  | { kind: 'none' }
+  | { kind: 'openFolder'; path: string }
+  | { kind: 'switch' }
+  | { kind: 'offerWorktree' };
+
+export function planSwitch(input: SwitchInput): SwitchPlan {
+  if (input.target === input.current) {
+    return { kind: 'none' };
+  }
+  if (input.target === input.trunk && input.worktrees.main !== input.currentWorktree) {
+    return { kind: 'openFolder', path: input.worktrees.main };
+  }
+  const elsewhere = input.worktrees.byBranch.get(input.target);
+  if (elsewhere !== undefined && elsewhere !== input.currentWorktree) {
+    return { kind: 'openFolder', path: elsewhere };
+  }
+  return input.dirty ? { kind: 'offerWorktree' } : { kind: 'switch' };
+}

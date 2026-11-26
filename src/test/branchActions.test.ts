@@ -3,7 +3,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { aheadBehind, hasTrackedChanges, listWorktrees } from '../branchActions';
+import { SwitchInput, aheadBehind, hasTrackedChanges, listWorktrees, planSwitch } from '../branchActions';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -86,5 +86,51 @@ suite('branch actions', () => {
     await commitFile(repo, 'm1.txt');
 
     assert.deepStrictEqual(await aheadBehind(repo, 'main', 'a'), { ahead: 2, behind: 1 });
+  });
+
+  suite('planSwitch', () => {
+    const base: SwitchInput = {
+      target: 'b',
+      trunk: 'main',
+      current: 'a',
+      currentWorktree: '/wt/a',
+      worktrees: {
+        main: '/root',
+        byBranch: new Map([
+          ['main', '/root'],
+          ['a', '/wt/a'],
+          ['c', '/wt/c'],
+        ]),
+      },
+      dirty: false,
+    };
+
+    test('the current branch needs nothing', () => {
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'a' }), { kind: 'none' });
+    });
+
+    test('the trunk opens the main worktree', () => {
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'main' }), { kind: 'openFolder', path: '/root' });
+    });
+
+    test('the trunk switches in place when this is the main worktree', () => {
+      const worktrees = { main: '/wt/a', byBranch: new Map([['a', '/wt/a']]) };
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'main', worktrees }), { kind: 'switch' });
+    });
+
+    test('a branch in another worktree opens that folder', () => {
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'c', dirty: true }), {
+        kind: 'openFolder',
+        path: '/wt/c',
+      });
+    });
+
+    test('a branch with no worktree switches in place when clean', () => {
+      assert.deepStrictEqual(planSwitch(base), { kind: 'switch' });
+    });
+
+    test('a branch with no worktree offers a worktree when dirty', () => {
+      assert.deepStrictEqual(planSwitch({ ...base, dirty: true }), { kind: 'offerWorktree' });
+    });
   });
 });
