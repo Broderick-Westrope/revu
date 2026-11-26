@@ -29,7 +29,7 @@ import { refreshPrThreads } from './commands/prThreads';
 import { quoteComment } from './commands/quoteComment';
 import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
-import { currentBranch, isDetachedHead, repoRoot } from './git';
+import { checkedOutBranch, repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { registerGitWatcher } from './gitWatcher';
 import { fetchStackExternal } from './github/gh';
@@ -186,8 +186,7 @@ function registerReviewRefresh(
   store: CommentStore
 ): void {
   let lastBranch: string | undefined;
-  const branchNow = async (): Promise<string | undefined> =>
-    (await isDetachedHead(state.repoRoot)) ? undefined : currentBranch(state.repoRoot);
+  const branchNow = (): Promise<string | undefined> => checkedOutBranch(state.repoRoot);
   const refreshFromGit = async (): Promise<void> => {
     const branch = await branchNow().catch(() => undefined);
     await state.refresh({ external: branch !== lastBranch });

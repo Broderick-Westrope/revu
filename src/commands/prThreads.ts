@@ -1,11 +1,7 @@
 import * as vscode from 'vscode';
-import { currentBranch, isDetachedHead } from '../git';
+import { checkedOutBranch } from '../git';
 import { fetchPrMetadata, fetchReviewThreads, isGhAvailable, resetGhAvailability } from '../github/gh';
 import { GithubThreadRenderer } from '../github/threadRenderer';
-
-async function checkedOutBranch(repoRoot: string): Promise<string | undefined> {
-  return (await isDetachedHead(repoRoot)) ? undefined : currentBranch(repoRoot);
-}
 
 export async function refreshPrThreads(
   renderer: GithubThreadRenderer,
