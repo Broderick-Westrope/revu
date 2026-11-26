@@ -43,7 +43,7 @@ The sidebar has three views:
 
 While reading diffs, leave comments with the native commenting UI (the `+` in the gutter). Comments are kept per branch and never leave your machine. GitHub threads for the branch's own PR render inline read-only, and you can quote one into a local comment. When you're done, `Revu: Copy All Comments as Markdown` puts the branch's comments on your clipboard as structured markdown (file paths, line ranges, fenced code context, quoted PR threads and your notes) to hand to your agent.
 
-Changes made outside the editor (an agent committing in another worktree, a fetch, a checkpoint moved from the terminal) show up when the window regains focus.
+Changes made outside the editor (an agent committing in another worktree, a fetch, a checkpoint moved from the terminal) show up when the window regains focus. PR state and gh stack data refresh when you switch branches or press Refresh.
 
 ### Checkpoints
 
@@ -53,7 +53,7 @@ The Checkpoint view tracks what you've already reviewed on the current branch. I
 
 Revu never writes to GitHub. No replies, no review submission, no pushes, no mutations of any kind; a guard test fails the suite if a write path ever appears in the source. That's deliberate: local comments are drafts for an agent conversation, and it should be impossible to accidentally publish one. Posting real PR feedback stays with the GitHub extension.
 
-It does change your local repo when you ask it to: Pull Default Branch fetches and fast-forwards the root worktree, Merge Parent fetches and merges, Switch runs `git switch` or `wtp add`, Compare With… writes `branch.<name>.revuParent` to git config, and checkpoints are refs under `refs/revu/`.
+It does change your local repo when you ask it to: Pull Default Branch fetches and fast-forwards the root worktree, Merge Parent merges (fetching first when the parent is a remote branch), Switch runs `git switch` or `wtp add`, Compare With… writes `branch.<name>.revuParent` to git config, and checkpoints are refs under `refs/revu/`.
 
 ## Requirements
 
@@ -85,7 +85,6 @@ Switch, Open in New Window and Open PR are inline actions on Stack rows. Per-thr
 ## Known limitations
 
 - Switching to a branch in another worktree replaces this window's folder, which reloads the extension host and closes open editors. Use Open in New Window to keep both.
-
 - Parent inference reads where each branch was created from git's reflog, which git expires after 90 days by default; older branches fall back to guessing from history, and the Changes view marks the guess as ambiguous.
 - Ahead and behind counts are relative to your last fetch. Revu only fetches in Pull Default Branch and Merge Parent.
 - PR state comes from the 200 most recent PRs in the repo, plus the current branch's own PR, so an old branch other than the current one may show "no PR".
