@@ -24,6 +24,7 @@ export interface GhStackView {
 
 export interface StackExternal {
   prs: PrSummary[];
+  prsFailed?: boolean;
   ghStack?: GhStackView;
 }
 
@@ -235,9 +236,9 @@ class Resolver {
 
   private inCycle(branch: string, direct: Map<string, BranchResolution>): boolean {
     const visited = new Set<string>();
-    let cursor: string | undefined = branch;
-    while (cursor !== undefined && direct.has(cursor)) {
-      if (visited.has(cursor)) {
+    let cursor = direct.get(branch)?.parent;
+    while (cursor !== undefined && direct.has(cursor) && !visited.has(cursor)) {
+      if (cursor === branch) {
         return true;
       }
       visited.add(cursor);

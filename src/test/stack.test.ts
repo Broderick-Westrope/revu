@@ -384,4 +384,20 @@ suite('stack parent resolution', () => {
     assert.strictEqual(result.current?.parent, 'a');
     assert.strictEqual(result.current?.diffBase, aTip);
   });
+  test('a branch stacked on a cycle keeps its own parent', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'c']);
+    await commitFile(repo, 'c1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['branch', 'd', 'b']);
+    await git(repo, ['config', 'branch.b.revuParent', 'c']);
+    await git(repo, ['config', 'branch.c.revuParent', 'b']);
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.branches.get('b')?.warning, 'parent cycle');
+    assert.strictEqual(result.branches.get('d')?.parent, 'b');
+    assert.strictEqual(result.branches.get('d')?.warning, undefined);
+  });
 });
