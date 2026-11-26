@@ -27,6 +27,15 @@ const SOURCE_LABELS: Record<ParentSource, string | undefined> = {
   trunk: undefined,
 };
 
+const STATUS_LABELS: Record<ChangedFile['status'], string> = {
+  A: 'added',
+  M: 'modified',
+  D: 'deleted',
+  R: 'renamed',
+  U: 'untracked',
+  X: 'conflict',
+};
+
 export function parentDescription(resolution: BranchResolution): string {
   const label = SOURCE_LABELS[resolution.source];
   const qualifiers = [label, resolution.ambiguous ? 'ambiguous' : undefined].filter(Boolean);
@@ -131,7 +140,7 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
       vscode.TreeItemCollapsibleState.None
     );
     item.resourceUri = vscode.Uri.file(path.join(element.repoRoot, element.file.path));
-    item.description = element.file.status === 'X' ? 'conflict' : element.file.status;
+    item.description = STATUS_LABELS[element.file.status];
     item.contextValue = 'revu.changesFile';
     item.command = {
       command: 'revu.openChangesFile',

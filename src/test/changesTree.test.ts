@@ -99,6 +99,9 @@ suite('changes tree provider', () => {
     );
     assert.deepStrictEqual(await filePaths(provider), ['src/b.ts', 'untracked.txt']);
     assert.strictEqual(captured.description, 'vs a (inferred)');
+    const untracked = roots.find((n) => n.kind === 'file');
+    assert.ok(untracked);
+    assert.strictEqual(provider.getTreeItem(untracked).description, 'untracked');
   });
 
   test('checkpoint mode lists only files changed after the checkpoint', async () => {
