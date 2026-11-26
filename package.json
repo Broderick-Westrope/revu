@@ -65,7 +65,8 @@
       },
       {
         "command": "revu.removeCheckpoint",
-        "title": "Revu: Remove Checkpoint"
+        "title": "Revu: Remove Checkpoint",
+        "icon": "$(close)"
       },
       {
         "command": "revu.compareWithWorkingTree",
@@ -213,6 +214,16 @@
           "command": "revu.resetParent",
           "group": "1_parent@2",
           "when": "view == revu.changesView && revu.hasParentOverride"
+        },
+        {
+          "command": "revu.setCheckpoint",
+          "group": "checkpoint@1",
+          "when": "view == revu.checkpointView"
+        },
+        {
+          "command": "revu.removeCheckpoint",
+          "group": "checkpoint@2",
+          "when": "view == revu.checkpointView"
         }
       ],
       "view/item/context": [
@@ -244,6 +255,11 @@
         {
           "command": "revu.compareWithWorkingTree",
           "when": "view == revu.checkpointView && viewItem == revu.commitFile"
+        },
+        {
+          "command": "revu.removeCheckpoint",
+          "group": "inline",
+          "when": "view == revu.checkpointView && viewItem == revu.checkpointCommit"
         }
       ],
       "editor/title": [

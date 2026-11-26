@@ -47,7 +47,7 @@ Changes made outside the editor (an agent committing in another worktree, a fetc
 
 ### Checkpoints
 
-The Checkpoint view tracks what you've already reviewed on the current branch. It lists the commits after the checkpoint (a per-branch ref, defaulting to the merge-base with the branch's parent). Marking a commit safe (the check action on a commit row) advances the checkpoint past it. Reviewed commits stay visible below with a check icon, the checkpoint is marked with a milestone icon, and Move Checkpoint Here moves it backwards. Merge commits show only what the merge changed beyond an automatic merge of its parents. `Revu: Set Checkpoint` picks any commit; `Revu: Remove Checkpoint` falls back to the merge-base. From a commit diff, `Revu: Compare with Working Tree` shows how that file looks now.
+The Checkpoint view tracks what you've already reviewed on the current branch. It lists the commits after the checkpoint (a per-branch ref, defaulting to the merge-base with the branch's parent). Marking a commit safe (the check action on a commit row) advances the checkpoint past it. Reviewed commits stay visible below with a check icon, the checkpoint is marked with a milestone icon, and Move Checkpoint Here moves it backwards. Merge commits show only what the merge changed beyond an automatic merge of its parents. Set Checkpoint (pick any commit) and Remove Checkpoint (fall back to the merge-base) are in the view's `...` menu, and Remove is also an inline action on the checkpoint row. From a commit diff, `Revu: Compare with Working Tree` shows how that file looks now.
 
 ## Read-only by design
 
