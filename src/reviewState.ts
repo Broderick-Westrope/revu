@@ -46,7 +46,11 @@ export class ReviewState {
   async refresh(options: { external?: boolean } = {}): Promise<void> {
     await this.resolve();
     if (options.external) {
-      const next = await this.fetchExternalOnce(this.lastBranch);
+      const branch = this.lastBranch;
+      const next = await this.fetchExternalOnce(branch);
+      if (branch !== this.lastBranch) {
+        return;
+      }
       if (!next.prsFailed) {
         this.hasPrData = true;
       }
@@ -64,7 +68,7 @@ export class ReviewState {
       return this.externalFetch.promise;
     }
     const promise = this.fetchExternal(this.repoRoot)
-      .catch((): StackExternal => ({ prs: [], prsFailed: true }))
+      .catch((): StackExternal => ({ prs: [], prsFailed: true, ghStackFailed: true }))
       .finally(() => {
         if (this.externalFetch?.promise === promise) {
           this.externalFetch = undefined;
@@ -106,10 +110,9 @@ export class ReviewState {
     return this.lastError;
   }
 
-  async files(): Promise<ChangedFile[]> {
-    const snapshot = this.current;
-    const diffBase = snapshot?.stack.current?.diffBase;
-    if (!snapshot?.base || !diffBase) {
+  async files(snapshot: ReviewSnapshot): Promise<ChangedFile[]> {
+    const diffBase = snapshot.stack.current?.diffBase;
+    if (!snapshot.base || !diffBase) {
       return [];
     }
     const all = await changedFiles(this.repoRoot, diffBase, true);
@@ -123,7 +126,8 @@ export class ReviewState {
   }
 
   async refreshIfChanged(): Promise<boolean> {
-    if ((await this.fingerprint()) === this.lastFingerprint) {
+    const fingerprint = await this.fingerprint().catch(() => undefined);
+    if (fingerprint !== undefined && fingerprint === this.lastFingerprint) {
       return false;
     }
     await this.refresh({ external: false });

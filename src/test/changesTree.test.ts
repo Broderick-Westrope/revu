@@ -306,3 +306,33 @@ suite('review state gh stack data', () => {
     fs.rmSync(repo, { recursive: true, force: true });
   });
 });
+
+suite('review state overlapping fetches', () => {
+  test('a slow fetch for a branch no longer checked out does not overwrite newer data', async () => {
+    const repo = await makeStack();
+    await commitFile(repo, 'first.txt');
+    let releaseSlow: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    let calls = 0;
+    const state = new ReviewState(repo, async () => {
+      calls++;
+      if (calls === 1) {
+        await slow;
+        return { prs: [{ number: 1, url: 'u1', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] };
+      }
+      return { prs: [{ number: 2, url: 'u2', state: 'OPEN', headRefName: 'a', baseRefName: 'main' }] };
+    });
+    const first = state.refresh({ external: true });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await git(repo, ['checkout', '-q', 'a']);
+    await state.refresh({ external: true });
+    releaseSlow();
+    await first;
+
+    assert.strictEqual(state.snapshot?.stack.current?.branch, 'a');
+    assert.strictEqual(state.snapshot?.stack.current?.pr?.number, 2);
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+});

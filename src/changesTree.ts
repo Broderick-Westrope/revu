@@ -128,7 +128,7 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
     }
     let files: ChangedFile[];
     try {
-      files = await this.state.files();
+      files = await this.state.files(snapshot);
     } catch (err) {
       this.setMessage?.(`Could not list changes: ${(err as Error).message}`);
       return [];
