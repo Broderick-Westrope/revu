@@ -467,4 +467,34 @@ suite('stack parent resolution', () => {
     assert.strictEqual(result.current?.parent, 'a');
     assert.strictEqual(result.current?.ambiguous, true);
   });
+  test('an override with no common history falls back to the default branch base and keeps the override', async () => {
+    const repo = await localRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-q', '--orphan', 'pages']);
+    await commitFile(repo, 'index.html');
+    await git(repo, ['checkout', '-q', '-b', 'b', 'main']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['config', 'branch.b.revuParent', 'pages']);
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.source, 'override');
+    assert.strictEqual(result.current?.diffBase, mainTip);
+    assert.strictEqual(result.current?.warning, 'no common history with pages');
+  });
+
+  test('an override onto a descendant breaks only the overridden branch', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'd']);
+    await commitFile(repo, 'd1.txt');
+    await git(repo, ['config', 'branch.a.revuParent', 'd']);
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.branches.get('a')?.warning, 'parent cycle');
+    assert.strictEqual(result.branches.get('a')?.source, 'override');
+    assert.strictEqual(result.branches.get('d')?.parent, 'a');
+  });
 });

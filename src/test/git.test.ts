@@ -72,7 +72,7 @@ suite('git wrapper', () => {
 
   test('mergeBase resolves to a commit SHA', async () => {
     const base = await mergeBase(repo, 'main');
-    assert.match(base, /^[0-9a-f]{40}$/);
+    assert.match(base ?? '', /^[0-9a-f]{40}$/);
   });
 
   test('changedFiles reports modify, add, delete, rename', async () => {

@@ -7,6 +7,7 @@ import {
   git,
   isAncestor,
   listWorktrees,
+  mergeBase,
   resolveRef,
 } from './git';
 import { GhStackView, PrSummary } from './github/model';
@@ -207,8 +208,10 @@ class Resolver {
       }
     }
     const cyclic = [...direct.keys()].filter((branch) => this.inCycle(branch, direct));
-    for (const branch of cyclic) {
-      direct.set(branch, { ...this.trunkResolution(branch), warning: 'parent cycle' });
+    const overridden = cyclic.filter((branch) => direct.get(branch)?.source === 'override');
+    for (const branch of overridden.length > 0 ? overridden : cyclic) {
+      const source = direct.get(branch)?.source === 'override' ? 'override' : 'trunk';
+      direct.set(branch, { ...this.trunkResolution(branch), source, warning: 'parent cycle' });
     }
     for (const layer of this.external.ghStack?.branches ?? []) {
       const resolution = direct.get(layer.name);
@@ -422,22 +425,45 @@ export async function resolveStack(repoRoot: string, external: StackExternal): P
     parentRef: graph.trunk.ref,
     source: 'trunk',
   };
-  const diffBase = await diffBaseFor(repoRoot, resolution);
+  const { diffBase, warning } = await diffBaseFor(repoRoot, resolution, graph.trunk);
   return {
     trunk: graph.trunk,
     branches,
     worktrees: graph.worktrees,
-    current: { ...resolution, diffBase, onTrunk: branch === graph.trunk.name },
+    current: {
+      ...resolution,
+      ...(warning ? { warning } : {}),
+      diffBase,
+      onTrunk: branch === graph.trunk.name,
+    },
   };
 }
 
-async function diffBaseFor(repoRoot: string, resolution: BranchResolution): Promise<string> {
+async function diffBaseFor(
+  repoRoot: string,
+  resolution: BranchResolution,
+  trunk: Trunk
+): Promise<{ diffBase: string; warning?: string }> {
   const mergeHead = await resolveRef(repoRoot, 'MERGE_HEAD');
   if (mergeHead && mergeHead === (await resolveRef(repoRoot, resolution.parentRef))) {
-    return mergeHead;
+    return { diffBase: mergeHead };
   }
-  const mergeBase = (await git(repoRoot, ['merge-base', 'HEAD', resolution.parentRef])).trim();
-  const stackBase = resolution.stackBase;
+  const parentBase = await mergeBase(repoRoot, resolution.parentRef);
+  if (!parentBase) {
+    const trunkBase = await mergeBase(repoRoot, trunk.ref);
+    if (!trunkBase) {
+      throw new Error(`HEAD shares no history with ${resolution.parent} or ${trunk.name}`);
+    }
+    return { diffBase: trunkBase, warning: `no common history with ${resolution.parent}` };
+  }
+  return { diffBase: await withStackBase(repoRoot, parentBase, resolution.stackBase) };
+}
+
+async function withStackBase(
+  repoRoot: string,
+  mergeBase: string,
+  stackBase: string | undefined
+): Promise<string> {
   if (
     stackBase &&
     stackBase !== mergeBase &&

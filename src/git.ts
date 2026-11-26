@@ -67,8 +67,8 @@ export async function defaultBranch(cwd: string): Promise<string> {
   }
 }
 
-export async function mergeBase(cwd: string, ref: string): Promise<string> {
-  return (await git(cwd, ['merge-base', 'HEAD', ref])).trim();
+export async function mergeBase(cwd: string, ref: string): Promise<string | undefined> {
+  return (await git(cwd, ['merge-base', 'HEAD', ref], [1])).trim() || undefined;
 }
 
 function parseNameStatus(output: string): ChangedFile[] {
