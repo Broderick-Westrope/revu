@@ -240,6 +240,10 @@ suite('checkpoint commands', () => {
     const last = items[items.length - 1];
     assert.strictEqual(last.label, 'Merge-base with parent');
     assert.strictEqual(last.sha, parentTip);
+    assert.deepStrictEqual(
+      items.slice(0, -1).map((item) => item.label),
+      ['add f1.txt']
+    );
   });
 
   test('without a parent base the picker offers commits only', async () => {

@@ -120,7 +120,7 @@ export async function checkpointPickItems(
   root: string,
   implicitBase?: string
 ): Promise<CheckpointPickItem[]> {
-  const commits = (await listCommits(root, 'HEAD')).slice(0, 50);
+  const commits = await listCommits(root, implicitBase ? `${implicitBase}..HEAD` : 'HEAD', 50);
   const items: CheckpointPickItem[] = commits.map((commit) => ({
     label: commit.subject,
     description: commit.shortSha,
