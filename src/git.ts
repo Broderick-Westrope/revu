@@ -32,11 +32,6 @@ export async function repoRoot(cwd: string): Promise<string> {
   return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
 }
 
-export async function currentBranch(cwd: string): Promise<string> {
-  const ref = (await git(cwd, ['symbolic-ref', 'HEAD'])).trim();
-  return ref.replace(/^refs\/heads\//, '');
-}
-
 export async function checkedOutBranch(cwd: string): Promise<string | undefined> {
   const ref = (await git(cwd, ['symbolic-ref', '--quiet', 'HEAD'], [1])).trim();
   return ref ? ref.replace(/^refs\/heads\//, '') : undefined;
@@ -198,10 +193,6 @@ export async function commitChangedFiles(
     sha,
   ]);
   return parseNameStatus(output);
-}
-
-export async function isDetachedHead(cwd: string): Promise<boolean> {
-  return (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim() === 'HEAD';
 }
 
 export async function gitDir(cwd: string): Promise<string> {

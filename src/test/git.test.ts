@@ -5,7 +5,6 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   changedFiles,
-  currentBranch,
   defaultBranch,
   mergeBase,
   repoRoot,
@@ -60,10 +59,6 @@ suite('git wrapper', () => {
   test('repoRoot resolves the repository root', async () => {
     const root = await repoRoot(repo);
     assert.strictEqual(fs.realpathSync(root), fs.realpathSync(repo));
-  });
-
-  test('currentBranch returns the checked-out branch', async () => {
-    assert.strictEqual(await currentBranch(repo), 'main');
   });
 
   test('defaultBranch falls back to main when origin/HEAD is absent', async () => {

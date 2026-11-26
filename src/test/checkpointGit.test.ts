@@ -5,11 +5,11 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   EMPTY_REF_SHA,
+  checkedOutBranch,
   commitChangedFiles,
   deleteRef,
   gitDir,
   isAncestor,
-  isDetachedHead,
   listCommits,
   resolveRef,
   updateRef,
@@ -150,10 +150,10 @@ suite('git ref and history primitives', () => {
     assert.strictEqual(files.length, 2);
   });
 
-  test('isDetachedHead reflects HEAD state', async () => {
-    assert.strictEqual(await isDetachedHead(repo), false);
+  test('checkedOutBranch names the branch and is undefined on a detached HEAD', async () => {
+    assert.strictEqual(await checkedOutBranch(repo), 'main');
     await git(repo, ['checkout', '--detach']);
-    assert.strictEqual(await isDetachedHead(repo), true);
+    assert.strictEqual(await checkedOutBranch(repo), undefined);
     await git(repo, ['checkout', 'main']);
   });
 

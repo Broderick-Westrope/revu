@@ -1,10 +1,9 @@
 import {
   CommitInfo,
+  checkedOutBranch,
   EMPTY_REF_SHA,
-  currentBranch,
   deleteRef,
   isAncestor,
-  isDetachedHead,
   listCommits,
   resolveRef,
   updateRef,
@@ -29,12 +28,12 @@ export type CheckpointState =
 
 export async function getCheckpointState(
   repoRoot: string,
-  implicitBase: string | undefined
+  implicitBase?: string
 ): Promise<CheckpointState> {
-  if (await isDetachedHead(repoRoot)) {
+  const branch = await checkedOutBranch(repoRoot);
+  if (!branch) {
     return { kind: 'detached' };
   }
-  const branch = await currentBranch(repoRoot);
   const sha = await resolveRef(repoRoot, checkpointRef(branch));
   if (sha) {
     const branchTip = await resolveRef(repoRoot, branchRef(branch));

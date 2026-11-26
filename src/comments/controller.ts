@@ -148,7 +148,7 @@ export class CommentManager implements vscode.Disposable {
 
   async clearAllComments(): Promise<void> {
     const confirmation = await vscode.window.showWarningMessage(
-      'Delete all local review comments? This cannot be undone.',
+      `Delete all local review comments on ${this.store.currentBranch ?? 'this branch'}? This cannot be undone.`,
       { modal: true },
       'Delete All'
     );
