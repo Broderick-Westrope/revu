@@ -117,6 +117,14 @@ suite('stack tree provider', () => {
     assert.deepStrictEqual(await outline(provider), ['main']);
   });
 
+  test('rows say nothing about PRs when PR data could not be fetched', async () => {
+    const repo = await makeRepo();
+    await branchFrom(repo, 'main', 'a');
+    const { provider } = await setup(repo, { prs: [], prsFailed: true });
+
+    assert.strictEqual((await item(provider, 'a')).description, '↑1 ↓0');
+  });
+
   test('a detached HEAD shows a message and no rows', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-q', '--detach']);

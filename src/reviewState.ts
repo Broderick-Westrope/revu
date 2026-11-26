@@ -21,7 +21,8 @@ export class ReviewState {
   private lastError: string | undefined;
   private generation = 0;
   private lastBranch: string | undefined;
-  private externalFetch: Promise<StackExternal> | undefined;
+  private externalFetch: { branch: string | undefined; promise: Promise<StackExternal> } | undefined;
+  private hasPrData = false;
 
   readonly onDidChange: vscode.Event<void> = this.emitter.event;
 
@@ -38,18 +39,35 @@ export class ReviewState {
     this.checkpointMode = on;
   }
 
+  get prsKnown(): boolean {
+    return this.hasPrData;
+  }
+
   async refresh(options: { external?: boolean } = {}): Promise<void> {
     await this.resolve();
     if (options.external ?? true) {
-      this.externalFetch ??= this.fetchExternal(this.repoRoot)
-        .catch((): StackExternal => ({ prs: [], prsFailed: true }))
-        .finally(() => {
-          this.externalFetch = undefined;
-        });
-      const next = await this.externalFetch;
+      const next = await this.fetchExternalOnce(this.lastBranch);
+      if (!next.prsFailed) {
+        this.hasPrData = true;
+      }
       this.external = next.prsFailed ? { ...next, prs: this.external.prs } : next;
       await this.resolve();
     }
+  }
+
+  private fetchExternalOnce(branch: string | undefined): Promise<StackExternal> {
+    if (this.externalFetch && this.externalFetch.branch === branch) {
+      return this.externalFetch.promise;
+    }
+    const promise = this.fetchExternal(this.repoRoot)
+      .catch((): StackExternal => ({ prs: [], prsFailed: true }))
+      .finally(() => {
+        if (this.externalFetch?.promise === promise) {
+          this.externalFetch = undefined;
+        }
+      });
+    this.externalFetch = { branch, promise };
+    return promise;
   }
 
   private async resolve(): Promise<void> {
@@ -110,7 +128,7 @@ export class ReviewState {
 
   private async fingerprint(): Promise<string> {
     const [head, refs, status, configPath] = await Promise.all([
-      git(this.repoRoot, ['rev-parse', '--symbolic-full-name', 'HEAD', 'HEAD']).catch(() => ''),
+      git(this.repoRoot, ['rev-parse', 'HEAD', '--symbolic-full-name', 'HEAD']).catch(() => ''),
       git(this.repoRoot, [
         'for-each-ref',
         '--format=%(refname) %(objectname)',

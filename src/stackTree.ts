@@ -61,7 +61,7 @@ export class StackTreeProvider implements vscode.TreeDataProvider<StackNode> {
         : vscode.TreeItemCollapsibleState.None
     );
     item.id = element.branch;
-    item.description = describe(element);
+    item.description = describe(element, this.state.prsKnown);
     item.tooltip = tooltip(element);
     item.iconPath = element.isCurrent
       ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.green'))
@@ -151,12 +151,17 @@ function flatten(node: StackNode): StackNode[] {
   return [node, ...node.children.flatMap(flatten)];
 }
 
-function describe(node: StackNode): string | undefined {
+function describe(node: StackNode, prsKnown: boolean): string | undefined {
   if (node.isTrunk) {
     return undefined;
   }
   const pr = node.resolution?.pr;
-  const parts = [pr ? `#${pr.number} ${pr.state.toLowerCase()}` : 'no PR'];
+  const parts: string[] = [];
+  if (pr) {
+    parts.push(`#${pr.number} ${pr.state.toLowerCase()}`);
+  } else if (prsKnown) {
+    parts.push('no PR');
+  }
   if (node.counts) {
     parts.push(`↑${node.counts.ahead} ↓${node.counts.behind}`);
   }
