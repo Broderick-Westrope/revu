@@ -400,4 +400,58 @@ suite('stack parent resolution', () => {
     assert.strictEqual(result.branches.get('d')?.parent, 'b');
     assert.strictEqual(result.branches.get('d')?.warning, undefined);
   });
+  test('an unknown gh stack base falls back to the merge-base', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    const mainTip = (await git(repo, ['rev-parse', 'main'])).trim();
+    await commitFile(repo, 'a1.txt');
+    const ghStack = {
+      trunk: 'main',
+      branches: [{ name: 'a', base: 'f'.repeat(40), isMerged: false, needsRebase: false }],
+    };
+
+    const result = await resolveStack(repo, { prs: [], ghStack });
+
+    assert.strictEqual(result.current?.diffBase, mainTip);
+  });
+
+  test('a gh stack layer missing locally is skipped for the next one down', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    const ghStack = {
+      trunk: 'main',
+      branches: [
+        { name: 'gone', base: '', isMerged: false, needsRebase: false },
+        { name: 'b', base: '', isMerged: false, needsRebase: false },
+      ],
+    };
+
+    const result = await resolveStack(repo, { prs: [], ghStack });
+
+    assert.strictEqual(result.current?.parent, 'main');
+  });
+
+  test('an amended lower layer uses the recorded gh stack base', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    const recorded = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['checkout', '-q', 'a']);
+    await git(repo, ['commit', '-q', '--amend', '-m', 'a1 amended']);
+    await git(repo, ['checkout', '-q', 'b']);
+    const ghStack = {
+      trunk: 'main',
+      branches: [
+        { name: 'a', base: (await git(repo, ['rev-parse', 'main'])).trim(), isMerged: false, needsRebase: false },
+        { name: 'b', base: recorded, isMerged: false, needsRebase: true },
+      ],
+    };
+
+    const result = await resolveStack(repo, { prs: [], ghStack });
+
+    assert.strictEqual(result.current?.diffBase, recorded);
+  });
 });

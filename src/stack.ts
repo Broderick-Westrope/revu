@@ -155,19 +155,20 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
   }
 
   const overrides = new Map<string, string>();
-  try {
-    const configOutput = await git(repoRoot, ['config', '--get-regexp', '^branch\\..*\\.revuparent$']);
-    for (const line of configOutput.split('\n')) {
-      const space = line.indexOf(' ');
-      if (space === -1) {
-        continue;
-      }
-      const match = OVERRIDE_KEY.exec(line.slice(0, space));
-      if (match) {
-        overrides.set(match[1], line.slice(space + 1).trim());
-      }
+  const configOutput = await git(
+    repoRoot,
+    ['config', '--get-regexp', '^branch\\..*\\.revuparent$'],
+    [1]
+  );
+  for (const line of configOutput.split('\n')) {
+    const space = line.indexOf(' ');
+    if (space === -1) {
+      continue;
     }
-  } catch {
+    const match = OVERRIDE_KEY.exec(line.slice(0, space));
+    if (match) {
+      overrides.set(match[1], line.slice(space + 1).trim());
+    }
   }
 
   const worktrees = await listWorktrees(repoRoot);
@@ -288,7 +289,7 @@ class Resolver {
     }
     let parent = this.graph.trunk.name;
     for (let i = index - 1; i >= 0; i--) {
-      if (!layers[i].isMerged) {
+      if (!layers[i].isMerged && this.graph.tips.has(layers[i].name)) {
         parent = layers[i].name;
         break;
       }
@@ -459,12 +460,16 @@ async function diffBaseFor(repoRoot: string, resolution: BranchResolution): Prom
   if (
     stackBase &&
     stackBase !== mergeBase &&
-    (await isAncestor(repoRoot, stackBase, 'HEAD')) &&
-    (await isAncestor(repoRoot, mergeBase, stackBase))
+    (await isAncestorOrFalse(repoRoot, stackBase, 'HEAD')) &&
+    (await isAncestorOrFalse(repoRoot, mergeBase, stackBase))
   ) {
     return stackBase;
   }
   return mergeBase;
+}
+
+async function isAncestorOrFalse(repoRoot: string, ancestor: string, descendant: string): Promise<boolean> {
+  return isAncestor(repoRoot, ancestor, descendant).catch(() => false);
 }
 
 export async function setParentOverride(cwd: string, branch: string, parent: string): Promise<void> {
