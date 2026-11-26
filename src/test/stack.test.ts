@@ -348,4 +348,40 @@ suite('stack parent resolution', () => {
     assert.strictEqual(result.current?.warning, undefined);
     assert.strictEqual(result.branches.get('d')?.parent, 'b');
   });
+  test('a sibling that merged the parent in is not taken for the parent', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'zparent']);
+    await commitFile(repo, 'p1.txt');
+    await git(repo, ['branch', 'y']);
+    await commitFile(repo, 'p2.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['checkout', '-q', 'y']);
+    await commitFile(repo, 'y1.txt');
+    await git(repo, ['merge', '-q', '--no-edit', 'zparent']);
+    await git(repo, ['checkout', '-q', 'b']);
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.parent, 'zparent');
+    assert.strictEqual(result.current?.ambiguous, undefined);
+  });
+
+  test('while merging the parent in, the diff base is the parent tip', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'shared.txt', 'one\n');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'shared.txt', 'b version\n');
+    await git(repo, ['checkout', '-q', 'a']);
+    await commitFile(repo, 'shared.txt', 'a version\n');
+    const aTip = await commitFile(repo, 'parent-only.txt');
+    await git(repo, ['checkout', '-q', 'b']);
+    await assert.rejects(git(repo, ['merge', '--no-edit', 'a']));
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.parent, 'a');
+    assert.strictEqual(result.current?.diffBase, aTip);
+  });
 });

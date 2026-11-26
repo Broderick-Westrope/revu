@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { currentBranch, defaultBranch, git, isAncestor, isDetachedHead } from './git';
+import { currentBranch, defaultBranch, git, isAncestor, isDetachedHead, resolveRef } from './git';
 
 export interface PrSummary {
   number: number;
@@ -71,6 +71,7 @@ interface BranchGraph {
   creations: Map<string, Creation>;
   creationsOffTrunk: Set<string>;
   overrides: Map<string, string>;
+  checkedOut: Set<string>;
 }
 
 const OVERRIDE_KEY = /^branch\.(.+)\.revuparent$/;
@@ -159,7 +160,15 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
   } catch {
   }
 
-  return { trunk, tips, remoteRefs, parents, creations, creationsOffTrunk, overrides };
+  const checkedOut = new Set<string>();
+  const worktreeOutput = await git(repoRoot, ['worktree', 'list', '--porcelain']);
+  for (const line of worktreeOutput.split('\n')) {
+    if (line.startsWith('branch refs/heads/')) {
+      checkedOut.add(line.slice('branch refs/heads/'.length));
+    }
+  }
+
+  return { trunk, tips, remoteRefs, parents, creations, creationsOffTrunk, overrides, checkedOut };
 }
 
 function readCreation(reflogPath: string): Creation | undefined {
@@ -306,7 +315,7 @@ class Resolver {
     if (creation && this.graph.parents.has(creation.sha)) {
       const candidates = this.otherBranches(branch).filter(
         (candidate) =>
-          this.ancestors(this.tip(candidate)).has(creation.sha) &&
+          this.firstParentChain(this.tip(candidate)).has(creation.sha) &&
           this.createdBelow(candidate, creation.sha)
       );
       if (creation.from && candidates.includes(creation.from)) {
@@ -360,16 +369,38 @@ class Resolver {
             distance++;
           }
         }
-        return { candidate, distance };
+        return { candidate, distance, preferred: this.preferred(candidate) ? 0 : 1 };
       })
-      .sort((a, b) => a.distance - b.distance || a.candidate.localeCompare(b.candidate));
+      .sort(
+        (a, b) =>
+          a.distance - b.distance ||
+          a.preferred - b.preferred ||
+          a.candidate.localeCompare(b.candidate)
+      );
     const tie = scored.length > 1 && scored[0].distance === scored[1].distance;
     const resolution = this.toBranch(branch, scored[0].candidate, 'inferred');
     return ambiguous || tie ? { ...resolution, ambiguous: true } : resolution;
   }
 
+  private preferred(branch: string): boolean {
+    return (
+      this.graph.checkedOut.has(branch) ||
+      (this.external.ghStack?.branches.some((layer) => layer.name === branch) ?? false)
+    );
+  }
+
   private tip(branch: string): string {
     return this.graph.tips.get(branch) as string;
+  }
+
+  private firstParentChain(sha: string): Set<string> {
+    const chain = new Set<string>();
+    let cursor: string | undefined = sha;
+    while (cursor !== undefined && this.graph.parents.has(cursor) && !chain.has(cursor)) {
+      chain.add(cursor);
+      cursor = this.graph.parents.get(cursor)?.[0];
+    }
+    return chain;
   }
 
   private ancestors(sha: string): Set<string> {
@@ -414,6 +445,10 @@ export async function resolveStack(repoRoot: string, external: StackExternal): P
 }
 
 async function diffBaseFor(repoRoot: string, resolution: BranchResolution): Promise<string> {
+  const mergeHead = await resolveRef(repoRoot, 'MERGE_HEAD');
+  if (mergeHead && mergeHead === (await resolveRef(repoRoot, resolution.parentRef))) {
+    return mergeHead;
+  }
   const mergeBase = (await git(repoRoot, ['merge-base', 'HEAD', resolution.parentRef])).trim();
   const stackBase = resolution.stackBase;
   if (
