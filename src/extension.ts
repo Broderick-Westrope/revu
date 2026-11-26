@@ -13,7 +13,6 @@ import {
   compareWithWorkingTree,
   openCommitDiff,
   openCommitFileDiff,
-  openWorkingTreeDiff,
   openWorkingTreeFileDiff,
 } from './commands/checkpointDiff';
 import { showDiff } from './commands/openDiff';
@@ -118,14 +117,16 @@ export function activate(context: vscode.ExtensionContext): void {
       moveCheckpointCommand(node, refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.setCheckpoint', () =>
-      setCheckpointCommand(refreshAfterCheckpointChange)
+      setCheckpointCommand(
+        refreshAfterCheckpointChange,
+        reviewState?.snapshot?.stack.current?.diffBase
+      )
     ),
     vscode.commands.registerCommand('revu.removeCheckpoint', () =>
       removeCheckpointCommand(refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.openCommitDiff', openCommitDiff),
     vscode.commands.registerCommand('revu.openCommitFileDiff', openCommitFileDiff),
-    vscode.commands.registerCommand('revu.openWorkingTreeDiff', openWorkingTreeDiff),
     vscode.commands.registerCommand('revu.openWorkingTreeFileDiff', openWorkingTreeFileDiff),
     vscode.commands.registerCommand('revu.compareWithWorkingTree', compareWithWorkingTree)
   );
@@ -151,9 +152,14 @@ export function activate(context: vscode.ExtensionContext): void {
     registerStackTree(context, state);
     registerChangesTree(context, state);
     registerStackContext(context, state);
-    checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
+    checkpointProvider = registerCheckpointTree(
+      context,
+      root,
+      gitStateEvent,
+      () => state.snapshot?.stack.current?.diffBase
+    );
     registerCheckpointGuard(context, root, gitStateEvent);
-    registerReviewRefresh(context, state, gitStateEvent, renderer);
+    registerReviewRefresh(context, state, gitStateEvent, renderer, store);
     await state.refresh();
   })();
 }
@@ -176,7 +182,8 @@ function registerReviewRefresh(
   context: vscode.ExtensionContext,
   state: ReviewState,
   gitStateEvent: vscode.Event<void>,
-  renderer: GithubThreadRenderer
+  renderer: GithubThreadRenderer,
+  store: CommentStore
 ): void {
   let lastBranch: string | undefined;
   const branchNow = async (): Promise<string | undefined> =>
@@ -191,6 +198,7 @@ function registerReviewRefresh(
       const branch = state.snapshot?.stack.current?.branch;
       if (branch !== lastBranch) {
         lastBranch = branch;
+        void store.setBranch(branch);
         void refreshPrThreads(renderer, state.repoRoot);
       }
     }),
