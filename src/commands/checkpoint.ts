@@ -116,23 +116,27 @@ export async function moveCheckpointCommand(node: CommitNode, refresh: () => voi
   await moveCheckpointTo(node, refresh);
 }
 
-export async function setCheckpointCommand(refresh: () => void): Promise<void> {
-  const root = await workspaceRepoRoot();
-  if (!root) {
-    return;
-  }
-  const state = await getCheckpointState(root);
-  if (state.kind === 'detached') {
-    void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
-    return;
-  }
+export type CheckpointPickItem = vscode.QuickPickItem & { sha: string };
+
+export async function checkpointPickItems(
+  root: string,
+  implicitBase?: string
+): Promise<CheckpointPickItem[]> {
   const commits = (await listCommits(root, 'HEAD')).slice(0, 50);
-  const items: (vscode.QuickPickItem & { sha: string })[] = commits.map((commit) => ({
+  const items: CheckpointPickItem[] = commits.map((commit) => ({
     label: commit.subject,
     description: commit.shortSha,
     detail: `${commit.author} — ${commit.date}`,
     sha: commit.sha,
   }));
+  if (implicitBase) {
+    items.push({
+      label: 'Merge-base with parent',
+      description: implicitBase.slice(0, 7),
+      sha: implicitBase,
+    });
+    return items;
+  }
   try {
     const def = await defaultBranch(root);
     const base = await mergeBase(root, def);
@@ -142,6 +146,23 @@ export async function setCheckpointCommand(refresh: () => void): Promise<void> {
       sha: base,
     });
   } catch {}
+  return items;
+}
+
+export async function setCheckpointCommand(
+  refresh: () => void,
+  implicitBase?: string
+): Promise<void> {
+  const root = await workspaceRepoRoot();
+  if (!root) {
+    return;
+  }
+  const state = await getCheckpointState(root, implicitBase);
+  if (state.kind === 'detached') {
+    void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
+    return;
+  }
+  const items = await checkpointPickItems(root, implicitBase);
   const pick = await vscode.window.showQuickPick(items, {
     placeHolder: 'Pick the checkpoint commit (everything up to it counts as reviewed)',
   });

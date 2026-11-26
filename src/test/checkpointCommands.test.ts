@@ -10,7 +10,12 @@ import {
   reviewedCommits,
   unreviewedCommits,
 } from '../checkpoint';
-import { expectedOldSha, moveCheckpointCommand, staleConflictRef } from '../commands/checkpoint';
+import {
+  checkpointPickItems,
+  expectedOldSha,
+  moveCheckpointCommand,
+  staleConflictRef,
+} from '../commands/checkpoint';
 import { CommitNode } from '../checkpointTree';
 import { EMPTY_REF_SHA } from '../git';
 
@@ -213,5 +218,28 @@ suite('checkpoint commands', () => {
     assert.strictEqual(refreshed, false);
     const refSha = (await git(repo, ['rev-parse', 'refs/revu/checkpoint/feature'])).trim();
     assert.strictEqual(refSha, c2);
+  });
+
+  test('the picker offers the merge-base with the parent when a parent diff base is given', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'parent']);
+    const parentTip = await commitFile(repo, 'p.txt', 'parent\n');
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const items = await checkpointPickItems(repo, parentTip);
+    const last = items[items.length - 1];
+    assert.strictEqual(last.label, 'Merge-base with parent');
+    assert.strictEqual(last.sha, parentTip);
+  });
+
+  test('the picker falls back to the merge-base with the default branch', async () => {
+    const repo = await makeRepo();
+    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    await commitFile(repo, 'f1.txt', 'one\n');
+    const items = await checkpointPickItems(repo);
+    const last = items[items.length - 1];
+    assert.strictEqual(last.label, 'Merge-base with main');
+    assert.strictEqual(last.sha, mainTip);
   });
 });
