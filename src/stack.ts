@@ -1,0 +1,392 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { currentBranch, defaultBranch, git, isAncestor, isDetachedHead } from './git';
+
+export interface PrSummary {
+  number: number;
+  url: string;
+  state: 'OPEN' | 'MERGED' | 'CLOSED';
+  headRefName: string;
+  baseRefName: string;
+}
+
+export interface GhStackBranch {
+  name: string;
+  base: string;
+  isMerged: boolean;
+  needsRebase: boolean;
+}
+
+export interface GhStackView {
+  trunk: string;
+  branches: GhStackBranch[];
+}
+
+export interface StackExternal {
+  prs: PrSummary[];
+  ghStack?: GhStackView;
+}
+
+export type ParentSource = 'override' | 'gh-stack' | 'pr' | 'inferred' | 'trunk';
+
+export interface BranchResolution {
+  branch: string;
+  parent: string;
+  parentRef: string;
+  source: ParentSource;
+  ambiguous?: boolean;
+  warning?: string;
+  pr?: PrSummary;
+  stackBase?: string;
+}
+
+export interface CurrentResolution extends BranchResolution {
+  diffBase: string;
+  onTrunk: boolean;
+}
+
+export interface Trunk {
+  name: string;
+  ref: string;
+}
+
+export interface StackResult {
+  trunk: Trunk;
+  branches: Map<string, BranchResolution>;
+  current?: CurrentResolution;
+}
+
+interface Creation {
+  sha: string;
+  from?: string;
+}
+
+interface BranchGraph {
+  trunk: Trunk;
+  tips: Map<string, string>;
+  remoteRefs: Set<string>;
+  parents: Map<string, string[]>;
+  creations: Map<string, Creation>;
+  overrides: Map<string, string>;
+}
+
+const OVERRIDE_KEY = /^branch\.(.+)\.revuparent$/;
+const CREATED_FROM = /^branch: Created from (.+)$/;
+
+async function loadGraph(repoRoot: string, external: StackExternal): Promise<BranchGraph> {
+  const refsOutput = await git(repoRoot, [
+    'for-each-ref',
+    '--format=%(refname)%00%(objectname)',
+    'refs/heads',
+    'refs/remotes/origin',
+  ]);
+  const tips = new Map<string, string>();
+  const remoteRefs = new Set<string>();
+  for (const line of refsOutput.split('\n')) {
+    if (!line) {
+      continue;
+    }
+    const [ref, sha] = line.split('\0');
+    if (ref.startsWith('refs/heads/')) {
+      tips.set(ref.slice('refs/heads/'.length), sha);
+    } else {
+      remoteRefs.add(ref.slice('refs/remotes/'.length));
+    }
+  }
+
+  const trunkName = external.ghStack?.trunk ?? (await defaultBranch(repoRoot));
+  const trunk: Trunk = {
+    name: trunkName,
+    ref: remoteRefs.has(`origin/${trunkName}`) ? `origin/${trunkName}` : trunkName,
+  };
+
+  const parents = new Map<string, string[]>();
+  const logOutput = await git(repoRoot, ['log', '--format=%H %P', '--branches', '--not', trunk.ref]);
+  for (const line of logOutput.split('\n')) {
+    if (!line.trim()) {
+      continue;
+    }
+    const [sha, ...rest] = line.trim().split(' ');
+    parents.set(sha, rest);
+  }
+
+  const commonDir = (
+    await git(repoRoot, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  ).trim();
+  const creations = new Map<string, Creation>();
+  for (const branch of tips.keys()) {
+    const creation = readCreation(path.join(commonDir, 'logs', 'refs', 'heads', branch));
+    if (creation) {
+      creations.set(branch, creation);
+    }
+  }
+
+  const overrides = new Map<string, string>();
+  try {
+    const configOutput = await git(repoRoot, ['config', '--get-regexp', '^branch\\..*\\.revuparent$']);
+    for (const line of configOutput.split('\n')) {
+      const space = line.indexOf(' ');
+      if (space === -1) {
+        continue;
+      }
+      const match = OVERRIDE_KEY.exec(line.slice(0, space));
+      if (match) {
+        overrides.set(match[1], line.slice(space + 1).trim());
+      }
+    }
+  } catch {
+  }
+
+  return { trunk, tips, remoteRefs, parents, creations, overrides };
+}
+
+function readCreation(reflogPath: string): Creation | undefined {
+  let content: string;
+  try {
+    content = fs.readFileSync(reflogPath, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const firstLine = content.split('\n')[0];
+  const [header, message = ''] = firstLine.split('\t');
+  const sha = header.split(' ')[1];
+  if (!sha) {
+    return undefined;
+  }
+  const match = CREATED_FROM.exec(message);
+  return { sha, from: match?.[1] };
+}
+
+class Resolver {
+  private readonly ancestorCache = new Map<string, Set<string>>();
+  private readonly mergedHeads: Set<string>;
+  private readonly openPrs = new Map<string, PrSummary>();
+  private readonly anyPrs = new Map<string, PrSummary>();
+
+  constructor(
+    private readonly graph: BranchGraph,
+    private readonly external: StackExternal
+  ) {
+    for (const pr of external.prs) {
+      if (pr.state === 'OPEN') {
+        this.openPrs.set(pr.headRefName, pr);
+      }
+      if (!this.anyPrs.has(pr.headRefName) || pr.state === 'OPEN') {
+        this.anyPrs.set(pr.headRefName, pr);
+      }
+    }
+    this.mergedHeads = new Set(
+      external.prs
+        .filter((pr) => pr.state === 'MERGED' && !this.openPrs.has(pr.headRefName))
+        .map((pr) => pr.headRefName)
+    );
+  }
+
+  resolveAll(): Map<string, BranchResolution> {
+    const direct = new Map<string, BranchResolution>();
+    for (const branch of this.graph.tips.keys()) {
+      if (branch !== this.graph.trunk.name) {
+        direct.set(branch, this.resolveDirect(branch));
+      }
+    }
+    const cyclic = [...direct.keys()].filter((branch) => this.inCycle(branch, direct));
+    for (const branch of cyclic) {
+      direct.set(branch, { ...this.trunkResolution(branch), warning: 'parent cycle' });
+    }
+    return direct;
+  }
+
+  private inCycle(branch: string, direct: Map<string, BranchResolution>): boolean {
+    const visited = new Set<string>();
+    let cursor: string | undefined = branch;
+    while (cursor !== undefined && direct.has(cursor)) {
+      if (visited.has(cursor)) {
+        return true;
+      }
+      visited.add(cursor);
+      cursor = direct.get(cursor)?.parent;
+    }
+    return false;
+  }
+
+  private trunkResolution(branch: string): BranchResolution {
+    return {
+      branch,
+      parent: this.graph.trunk.name,
+      parentRef: this.graph.trunk.ref,
+      source: 'trunk',
+      pr: this.anyPrs.get(branch),
+    };
+  }
+
+  private toBranch(branch: string, parent: string, source: ParentSource): BranchResolution {
+    if (parent === this.graph.trunk.name) {
+      return { ...this.trunkResolution(branch), source };
+    }
+    return { branch, parent, parentRef: parent, source, pr: this.anyPrs.get(branch) };
+  }
+
+  private resolveDirect(branch: string): BranchResolution {
+    let warning: string | undefined;
+    const override = this.graph.overrides.get(branch);
+    if (override !== undefined) {
+      if (override === this.graph.trunk.name || this.graph.tips.has(override)) {
+        return this.toBranch(branch, override, 'override');
+      }
+      warning = 'override target missing';
+    }
+    const resolved = this.fromGhStack(branch) ?? this.fromPr(branch) ?? this.infer(branch);
+    return warning ? { ...resolved, warning } : resolved;
+  }
+
+  private fromGhStack(branch: string): BranchResolution | undefined {
+    const layers = this.external.ghStack?.branches ?? [];
+    const index = layers.findIndex((layer) => layer.name === branch);
+    if (index === -1) {
+      return undefined;
+    }
+    let parent = this.graph.trunk.name;
+    for (let i = index - 1; i >= 0; i--) {
+      if (!layers[i].isMerged) {
+        parent = layers[i].name;
+        break;
+      }
+    }
+    return { ...this.toBranch(branch, parent, 'gh-stack'), stackBase: layers[index].base };
+  }
+
+  private fromPr(branch: string): BranchResolution | undefined {
+    const pr = this.openPrs.get(branch);
+    if (!pr) {
+      return undefined;
+    }
+    const base = pr.baseRefName;
+    if (base === this.graph.trunk.name || this.graph.tips.has(base)) {
+      return this.toBranch(branch, base, 'pr');
+    }
+    if (this.graph.remoteRefs.has(`origin/${base}`)) {
+      return { branch, parent: base, parentRef: `origin/${base}`, source: 'pr', pr };
+    }
+    return undefined;
+  }
+
+  private infer(branch: string): BranchResolution {
+    const creation = this.graph.creations.get(branch);
+    if (creation) {
+      if (!this.graph.parents.has(creation.sha)) {
+        return this.trunkResolution(branch);
+      }
+      const candidates = this.otherBranches(branch).filter(
+        (candidate) =>
+          this.ancestors(this.tip(candidate)).has(creation.sha) &&
+          this.createdBelow(candidate, creation.sha)
+      );
+      if (creation.from && candidates.includes(creation.from)) {
+        return this.toBranch(branch, creation.from, 'inferred');
+      }
+      if (candidates.length > 0) {
+        return this.nearest(branch, candidates, false);
+      }
+    }
+    const tip = this.tip(branch);
+    const own = this.ancestors(tip);
+    const forks = this.otherBranches(branch).filter((candidate) => {
+      const theirs = this.ancestors(this.tip(candidate));
+      return !theirs.has(tip) && [...own].some((sha) => theirs.has(sha));
+    });
+    if (forks.length > 0) {
+      return this.nearest(branch, forks, true);
+    }
+    return this.trunkResolution(branch);
+  }
+
+  private otherBranches(branch: string): string[] {
+    return [...this.graph.tips.keys()].filter(
+      (candidate) =>
+        candidate !== branch &&
+        candidate !== this.graph.trunk.name &&
+        !this.mergedHeads.has(candidate)
+    );
+  }
+
+  private createdBelow(candidate: string, creationSha: string): boolean {
+    const theirs = this.graph.creations.get(candidate);
+    if (!theirs) {
+      return false;
+    }
+    if (!this.graph.parents.has(theirs.sha)) {
+      return true;
+    }
+    return theirs.sha !== creationSha && this.ancestors(creationSha).has(theirs.sha);
+  }
+
+  private nearest(branch: string, candidates: string[], ambiguous: boolean): BranchResolution {
+    const own = this.ancestors(this.tip(branch));
+    const scored = candidates
+      .map((candidate) => {
+        const theirs = this.ancestors(this.tip(candidate));
+        let distance = 0;
+        for (const sha of own) {
+          if (!theirs.has(sha)) {
+            distance++;
+          }
+        }
+        return { candidate, distance };
+      })
+      .sort((a, b) => a.distance - b.distance || a.candidate.localeCompare(b.candidate));
+    const tie = scored.length > 1 && scored[0].distance === scored[1].distance;
+    const resolution = this.toBranch(branch, scored[0].candidate, 'inferred');
+    return ambiguous || tie ? { ...resolution, ambiguous: true } : resolution;
+  }
+
+  private tip(branch: string): string {
+    return this.graph.tips.get(branch) as string;
+  }
+
+  private ancestors(sha: string): Set<string> {
+    const cached = this.ancestorCache.get(sha);
+    if (cached) {
+      return cached;
+    }
+    const seen = new Set<string>();
+    const pending = [sha];
+    while (pending.length > 0) {
+      const next = pending.pop() as string;
+      if (seen.has(next) || !this.graph.parents.has(next)) {
+        continue;
+      }
+      seen.add(next);
+      pending.push(...(this.graph.parents.get(next) as string[]));
+    }
+    this.ancestorCache.set(sha, seen);
+    return seen;
+  }
+}
+
+export async function resolveStack(repoRoot: string, external: StackExternal): Promise<StackResult> {
+  const graph = await loadGraph(repoRoot, external);
+  const branches = new Resolver(graph, external).resolveAll();
+  if (await isDetachedHead(repoRoot)) {
+    return { trunk: graph.trunk, branches };
+  }
+  const branch = await currentBranch(repoRoot);
+  const resolution: BranchResolution = branches.get(branch) ?? {
+    branch,
+    parent: graph.trunk.name,
+    parentRef: graph.trunk.ref,
+    source: 'trunk',
+  };
+  const diffBase = await diffBaseFor(repoRoot, resolution);
+  return {
+    trunk: graph.trunk,
+    branches,
+    current: { ...resolution, diffBase, onTrunk: branch === graph.trunk.name },
+  };
+}
+
+async function diffBaseFor(repoRoot: string, resolution: BranchResolution): Promise<string> {
+  if (resolution.stackBase && (await isAncestor(repoRoot, resolution.stackBase, 'HEAD'))) {
+    return resolution.stackBase;
+  }
+  return (await git(repoRoot, ['merge-base', 'HEAD', resolution.parentRef])).trim();
+}

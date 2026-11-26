@@ -18,7 +18,7 @@ export interface CommitInfo {
 
 export const EMPTY_REF_SHA = '0000000000000000000000000000000000000000';
 
-function git(cwd: string, args: string[]): Promise<string> {
+export function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
       if (err) {
