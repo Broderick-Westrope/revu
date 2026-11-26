@@ -112,7 +112,7 @@ suite('changes tree provider', () => {
     const { provider, state, captured } = await setup(repo);
 
     assert.deepStrictEqual(await filePaths(provider), ['first.txt', 'second.txt']);
-    state.setCheckpointMode(true);
+    await state.setCheckpointMode(true);
     await state.refresh({ external: true });
 
     assert.deepStrictEqual(await filePaths(provider), ['second.txt']);
@@ -124,7 +124,7 @@ suite('changes tree provider', () => {
     const first = await commitFile(repo, 'first.txt');
     await markSafe(repo, 'b', first);
     const { provider, state, captured } = await setup(repo);
-    state.setCheckpointMode(true);
+    await state.setCheckpointMode(true);
     await state.refresh();
 
     assert.deepStrictEqual(await provider.getChildren(), []);
@@ -135,7 +135,7 @@ suite('changes tree provider', () => {
     const repo = await makeStack();
     await commitFile(repo, 'first.txt');
     const { provider, state } = await setup(repo);
-    state.setCheckpointMode(true);
+    await state.setCheckpointMode(true);
     await state.refresh({ external: true });
 
     assert.deepStrictEqual(await filePaths(provider), ['first.txt']);

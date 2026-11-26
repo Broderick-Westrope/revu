@@ -55,13 +55,6 @@ function withState<T extends unknown[]>(
   return (...args: T) => (reviewState ? action(reviewState, ...args) : undefined);
 }
 
-async function setCheckpointMode(on: boolean): Promise<void> {
-  if (!reviewState) {
-    return;
-  }
-  reviewState.setCheckpointMode(on);
-  await reviewState.refresh();
-}
 
 export function activate(context: vscode.ExtensionContext): void {
   const renderer = new GithubThreadRenderer();
@@ -83,7 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
       )
     ),
     vscode.commands.registerCommand(
-      'revu.refreshStack',
+      'revu.refresh',
       withState((state) => state.refresh({ external: true }))
     ),
     vscode.commands.registerCommand(
@@ -108,12 +101,18 @@ export function activate(context: vscode.ExtensionContext): void {
       'revu.resetParent',
       withState(resetParentCommand)
     ),
-    vscode.commands.registerCommand('revu.showSinceCheckpoint', () => setCheckpointMode(true)),
-    vscode.commands.registerCommand('revu.showAllChanges', () => setCheckpointMode(false)),
+    vscode.commands.registerCommand(
+      'revu.showSinceCheckpoint',
+      withState((state) => state.setCheckpointMode(true))
+    ),
+    vscode.commands.registerCommand(
+      'revu.showAllChanges',
+      withState((state) => state.setCheckpointMode(false))
+    ),
     vscode.commands.registerCommand('revu.openChangesFile', (node: ChangesFileNode) =>
       showDiff(node.file, { repoRoot: node.repoRoot, baseRef: node.baseRef })
     ),
-        vscode.commands.registerCommand('revu.markSafe', (node) =>
+    vscode.commands.registerCommand('revu.markSafe', (node) =>
       markSafeCommand(node, refreshAfterCheckpointChange)
     ),
     vscode.commands.registerCommand('revu.moveCheckpoint', (node) =>
@@ -198,14 +197,13 @@ function registerReviewRefresh(
 ): void {
   let lastBranch: string | undefined;
   let lastPrKey: string | undefined;
-  const branchNow = (): Promise<string | undefined> => checkedOutBranch(state.repoRoot);
   const refreshFromGit = async (): Promise<void> => {
-    const branch = await branchNow().catch(() => undefined);
+    const branch = await checkedOutBranch(state.repoRoot).catch(() => undefined);
     await state.refresh({ external: branch !== lastBranch });
   };
   const refreshOnFocus = async (): Promise<void> => {
     try {
-      const branch = await branchNow();
+      const branch = await checkedOutBranch(state.repoRoot);
       if (branch !== lastBranch) {
         await state.refresh({ external: true });
       } else {

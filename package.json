@@ -73,7 +73,7 @@
         "icon": "$(edit)"
       },
       {
-        "command": "revu.refreshStack",
+        "command": "revu.refresh",
         "title": "Revu: Refresh",
         "icon": "$(refresh)"
       },
@@ -180,7 +180,7 @@
           "when": "view == revu.stackView && revu.onFeatureBranch && !revu.inGhStack"
         },
         {
-          "command": "revu.refreshStack",
+          "command": "revu.refresh",
           "group": "navigation@3",
           "when": "view == revu.stackView"
         },
@@ -195,12 +195,12 @@
           "when": "view == revu.changesView && revu.checkpointMode"
         },
         {
-          "command": "revu.refreshStack",
+          "command": "revu.refresh",
           "group": "navigation",
           "when": "view == revu.changesView"
         },
         {
-          "command": "revu.refreshStack",
+          "command": "revu.refresh",
           "group": "navigation",
           "when": "view == revu.checkpointView"
         },
