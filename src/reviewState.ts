@@ -68,7 +68,7 @@ export class ReviewState {
     if (!this.checkpointMode) {
       return { base: current.diffBase };
     }
-    const state = await getCheckpointState(this.repoRoot);
+    const state = await getCheckpointState(this.repoRoot, current.diffBase);
     switch (state.kind) {
       case 'explicit':
         return { base: state.sha };
