@@ -19,7 +19,7 @@ Steps 1–3 had no good home. The pieces existed, but spread across three tools 
 
 - [GitLens](https://www.gitkraken.com/gitlens) compares a branch with anything, but has no idea which branch it's stacked on, and every comparison is set up by hand.
 - [pair-review](https://github.com/in-the-loop-labs/pair-review) reviews local changes with AI assistance, but in a browser, outside the editor.
-- [comment-renderer](https://marketplace.visualstudio.com/items?itemName=statiolake.vscode-comment-renderer) exports editor comments as markdown for agents, but without diff scopes or review guidance.
+- [comment-renderer](https://marketplace.visualstudio.com/items?itemName=statiolake.vscode-comment-renderer) exports editor comments as markdown for agents, but knows nothing about which branch or change you're reviewing.
 
 Revu is those three ideas rebuilt as one extension, in the editor where the review actually happens. Credit to all three for the inspiration.
 
@@ -67,7 +67,7 @@ It does change your local repo when you ask it to: Pull Default Branch fetches a
 
 | Command | What it does |
 | --- | --- |
-| `Revu: Refresh` | Re-read git state and PR data for the Stack and Changes views. |
+| `Revu: Refresh` | Re-read git state and PR data for all three views. |
 | `Revu: Pull Default Branch` | Fetch `origin`, then fast-forward the root worktree when it's on the default branch and clean. |
 | `Revu: Merge Parent` | Merge the branch's parent into it. Refuses with uncommitted tracked changes; leaves conflicts for the merge editor. |
 | `Revu: Compare With…` | Pick the branch's parent yourself. |
@@ -78,12 +78,13 @@ It does change your local repo when you ask it to: Pull Default Branch fetches a
 | `Revu: Clear All Comments` | Delete the branch's local comments (with confirmation). |
 | `Revu: Set Checkpoint` | Pick the commit everything up to which counts as reviewed on this branch. |
 | `Revu: Remove Checkpoint` | Delete the branch's checkpoint ref. |
-| `Revu: Refresh Checkpoint View` | Re-read git state for the Checkpoint view. |
 | `Revu: Compare with Working Tree` | From a commit diff, show the same file against the working tree. |
 
 Switch, Open in New Window and Open PR are inline actions on Stack rows. Per-thread actions (copy one comment, delete, quote a GitHub comment) live on the comment thread's title bar. Mark Safe and Move Checkpoint Here are inline actions on commit rows.
 
 ## Known limitations
+
+- Switching to a branch in another worktree replaces this window's folder, which reloads the extension host and closes open editors. Use Open in New Window to keep both.
 
 - Parent inference reads where each branch was created from git's reflog, which git expires after 90 days by default; older branches fall back to guessing from history, and the Changes view marks the guess as ambiguous.
 - Ahead and behind counts are relative to your last fetch. Revu only fetches in Pull Default Branch and Merge Parent.
