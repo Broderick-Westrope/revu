@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { Worktrees, aheadBehind } from './git';
+import { logWarningOnce } from './log';
 import { ReviewState } from './reviewState';
 import { BranchResolution, StackResult } from './stack';
 
@@ -50,7 +51,10 @@ export class StackTreeProvider implements vscode.TreeDataProvider<StackNode> {
           return;
         }
         node.counts = await aheadBehind(repoRoot, node.resolution.parentRef, node.branch).catch(
-          () => undefined
+          (err: Error) => {
+            logWarningOnce(`could not count commits for ${node.branch}: ${err.message}`);
+            return undefined;
+          }
         );
       })
     );

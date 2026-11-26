@@ -62,6 +62,7 @@ interface BranchGraph {
   worktrees: Worktrees;
 }
 
+const OVERRIDE_SUFFIX = 'revuParent';
 const OVERRIDE_KEY = /^branch\.(.+)\.revuparent$/;
 const CREATED_FROM = /^branch: Created from (.+)$/;
 
@@ -493,12 +494,12 @@ export function descendantsOf(stack: StackResult, branch: string): Set<string> {
 }
 
 export async function setParentOverride(cwd: string, branch: string, parent: string): Promise<void> {
-  await git(cwd, ['config', `branch.${branch}.revuParent`, parent]);
+  await git(cwd, ['config', `branch.${branch}.${OVERRIDE_SUFFIX}`, parent]);
 }
 
 export async function resetParentOverride(cwd: string, branch: string): Promise<void> {
   try {
-    await git(cwd, ['config', '--unset', `branch.${branch}.revuParent`]);
+    await git(cwd, ['config', '--unset', `branch.${branch}.${OVERRIDE_SUFFIX}`]);
   } catch (err) {
     if ((err as { code?: number }).code !== 5) {
       throw err;

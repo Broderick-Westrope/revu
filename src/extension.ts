@@ -1,4 +1,3 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangesFileNode, registerChangesTree } from './changesTree';
 import { registerCheckpointTree } from './checkpointTree';
@@ -29,7 +28,7 @@ import { refreshPrThreads } from './commands/prThreads';
 import { quoteComment } from './commands/quoteComment';
 import { registerComments } from './comments/controller';
 import { CommentStore } from './comments/store';
-import { checkedOutBranch, repoRoot } from './git';
+import { checkedOutBranch, isInside, repoRoot } from './git';
 import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { registerGitWatcher } from './gitWatcher';
 import { fetchStackExternal } from './github/gh';
@@ -235,8 +234,7 @@ function registerReviewRefresh(
       }
     }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      const rel = path.relative(state.repoRoot, doc.uri.fsPath);
-      if (doc.uri.scheme !== 'file' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      if (doc.uri.scheme !== 'file' || !isInside(state.repoRoot, doc.uri.fsPath)) {
         return;
       }
       if (saveTimer) {

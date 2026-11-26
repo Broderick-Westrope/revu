@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { run } from './exec';
 
 export interface ChangedFile {
@@ -250,4 +251,9 @@ export async function aheadBehind(
   const output = await git(cwd, ['rev-list', '--left-right', '--count', `${parentRef}...${branch}`]);
   const [behind, ahead] = output.trim().split(/\s+/).map(Number);
   return { ahead, behind };
+}
+
+export function isInside(root: string, file: string): boolean {
+  const rel = path.relative(root, file);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }

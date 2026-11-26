@@ -1,16 +1,10 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { mergeParent, planSwitch, pullDefaultBranch, PullResult } from '../branchActions';
-import { checkedOutBranch, git, hasTrackedChanges, listWorktrees } from '../git';
+import { checkedOutBranch, git, hasTrackedChanges, isInside, listWorktrees } from '../git';
 import { ReviewState } from '../reviewState';
 import { descendantsOf, resetParentOverride, setParentOverride } from '../stack';
 import { StackNode } from '../stackTree';
 import { addWorktree } from '../wtp';
-
-function isInside(root: string, file: string): boolean {
-  const rel = path.relative(root, file);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-}
 
 function errorText(err: unknown): string {
   const stderr = (err as { stderr?: string }).stderr?.trim();
