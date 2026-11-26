@@ -144,7 +144,7 @@ Selecting a row does nothing beyond selection, because switching can reload the 
 - [ ] After Merge Parent with the checkpoint one commit behind `HEAD`, checkpoint mode lists that commit's files and none that only the parent changed.
 - [ ] A merge commit's row in the Checkpoint view lists only files where the merge differs from the automatic merge of its parents, including for a merge whose automatic merge conflicted.
 - [ ] Switch on a layer checked out in another worktree opens that folder in the current window; Open in New Window keeps the current one; clicking a row alone never switches.
-- [ ] Switch on a layer with no worktree from a clean worktree (untracked files allowed) switches to it; from a worktree with tracked changes it offers Create Worktree and never switches.
+- [ ] Switch on another layer of the same gh stack with no worktree switches to it when nothing is uncommitted or unsaved (untracked files allowed), and otherwise offers Create Worktree and never switches; Switch on any other branch with no worktree creates one with `wtp` and opens it.
 - [ ] A commit made on the parent from another worktree shows in the Stack view's behind count after the window regains focus, and refocusing with nothing changed runs no git commands beyond the change check.
 - [ ] Toggling checkpoint mode after marking a commit safe lists only files changed after it; with no checkpoint both modes list the same files.
 - [ ] Comments left on branch `a` aren't shown or exported after switching in place to `b`, and reappear after switching back.
