@@ -66,7 +66,7 @@ Compare With… in the Changes view title picks a local branch and writes the ov
 
 Selecting a row does nothing beyond selection, because switching can reload the window and a stray click shouldn't do that. The actions are inline:
 
-- **Switch** on a branch with no worktree, or the current worktree's other gh-stack layers: `git switch` when the worktree is clean. When it's dirty, it refuses and offers Create Worktree, which runs `wtp add <branch>` and opens the result in this window.
+- **Switch** on another layer of the current worktree's gh stack: `git switch` when nothing is uncommitted or unsaved. When something is, it refuses and offers Create Worktree, which runs `wtp add <branch>` and opens the result in this window. Any other branch with no worktree gets one straight away the same way.
 - **Switch** on a branch checked out in another worktree opens that folder in the current window. **Open in New Window** covers the rare case of wanting both.
 - The trunk row's Switch opens the root worktree.
 - **Open PR** opens the PR URL in the browser.
@@ -104,7 +104,7 @@ Selecting a row does nothing beyond selection, because switching can reload the 
 
 ### What does Switch do for a branch with no worktree?
 
-**`git switch` in place when the worktree is clean, otherwise offer to create a worktree.** gh stack already keeps all layers in one worktree, so switching in place matches how those stacks are built. A dirty worktree is usually an agent's work in progress.
+**Switch in place only between layers of the same gh stack; anywhere else, create a worktree with `wtp add`.** gh stack keeps a whole stack in one worktree, so switching in place matches how those stacks are built. Elsewhere the current folder is a wtp worktree named for its branch, often with an agent working in it, and switching it would leave the folder and branch out of step (a later `wtp add` for the old branch collides with it) and move the agent's next commit onto another branch. This replaces the first version's "switch in place whenever the worktree is clean", which review of the early build showed was unsafe.
 
 ### Where does a switch to another worktree open?
 

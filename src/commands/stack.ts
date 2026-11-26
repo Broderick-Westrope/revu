@@ -73,6 +73,8 @@ export async function switchToBranchCommand(
       current: stack.current?.branch,
       currentWorktree: root,
       worktrees: await listWorktrees(root),
+      sameGhStack:
+        stack.current?.inGhStack === true && stack.branches.get(node.branch)?.inGhStack === true,
       dirty:
         (await hasTrackedChanges(root)) ||
         vscode.workspace.textDocuments.some((doc) => doc.isDirty && doc.uri.scheme === 'file'),
@@ -86,6 +88,9 @@ export async function switchToBranchCommand(
       case 'switch':
         await switchBranch(root, node.branch);
         await refresh({ external: true });
+        return;
+      case 'createWorktree':
+        await createWorktree(root, node.branch);
         return;
       case 'offerWorktree': {
         const choice = await vscode.window.showWarningMessage(

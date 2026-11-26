@@ -151,6 +151,7 @@ suite('branch actions', () => {
         ]),
       },
       dirty: false,
+      sameGhStack: false,
     };
 
     test('the current branch needs nothing', () => {
@@ -173,12 +174,18 @@ suite('branch actions', () => {
       });
     });
 
-    test('a branch with no worktree switches in place when clean', () => {
-      assert.deepStrictEqual(planSwitch(base), { kind: 'switch' });
+    test('a gh stack layer with no worktree switches in place when clean', () => {
+      assert.deepStrictEqual(planSwitch({ ...base, sameGhStack: true }), { kind: 'switch' });
     });
 
-    test('a branch with no worktree offers a worktree when dirty', () => {
-      assert.deepStrictEqual(planSwitch({ ...base, dirty: true }), { kind: 'offerWorktree' });
+    test('a gh stack layer with no worktree offers a worktree when dirty', () => {
+      assert.deepStrictEqual(planSwitch({ ...base, sameGhStack: true, dirty: true }), {
+        kind: 'offerWorktree',
+      });
+    });
+
+    test('outside a gh stack a branch with no worktree gets its own worktree', () => {
+      assert.deepStrictEqual(planSwitch(base), { kind: 'createWorktree' });
     });
   });
 

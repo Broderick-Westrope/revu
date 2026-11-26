@@ -37,7 +37,7 @@ The parent is picked in this order, and the Changes view title says which one wo
 
 The sidebar has three views:
 
-1. **Stack** shows the current branch's chain of parents down to trunk and the branches stacked on top of it, with each one's PR, commits ahead of and behind its parent, and whether a gh stack says it needs a rebase. Switch on a row checks the branch out in place (when your worktree has no tracked changes), opens its worktree in this window, or offers to create one with `wtp`. The title bar has Pull Default Branch (fetch, then fast-forward the root worktree when it's clean) and Merge Parent (hidden for gh-stack branches, where restacking is the tool).
+1. **Stack** shows the current branch's chain of parents down to trunk and the branches stacked on top of it, with each one's PR, commits ahead of and behind its parent, and whether a gh stack says it needs a rebase. Switch on a row opens the branch's worktree in this window, creating one with `wtp` when it has none. Layers of the same gh stack switch in place instead (when nothing is uncommitted or unsaved), since gh stack keeps a whole stack in one worktree. The title bar has Pull Default Branch (fetch, then fast-forward the root worktree when it's clean) and Merge Parent (hidden for gh-stack branches, where restacking is the tool).
 2. **Changes** lists the files changed on this branch against its parent, including uncommitted and untracked files, as a folder tree. Files open as native diffs with the live file on the right. The milestone button narrows the list to changes since the branch's checkpoint.
 3. **Leave comments** with the native commenting UI (the `+` in the gutter). Comments are kept per branch and never leave your machine. GitHub threads for the branch's own PR render inline read-only, and you can quote one into a local comment.
 4. **Hand off to the agent** with `Revu: Copy All Comments`, which puts the branch's comments on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads and your notes.
@@ -57,7 +57,7 @@ Revu never writes to GitHub. No replies, no review submission, no mutations of a
 - `git` on PATH.
 - `gh` (authenticated) for PR state and threads. Optional; without it Revu skips the GitHub context and finds parents from git alone.
 - The `gh stack` extension, optional, for exact parents of gh-stack layers.
-- `wtp` on the PATH VS Code sees, only for Create Worktree.
+- `wtp` on the PATH VS Code sees, for switching to a branch that has no worktree yet.
 
 ## Commands
 
