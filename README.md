@@ -37,10 +37,11 @@ The parent is picked in this order, and the Changes view title says which one wo
 
 The sidebar has three views:
 
-1. **Stack** shows the current branch's chain of parents down to trunk and the branches stacked on top of it, with each one's PR, commits ahead of and behind its parent, and whether a gh stack says it needs a rebase. Switch on a row opens the branch's worktree in this window, creating one with `wtp` when it has none. Layers of the same gh stack switch in place instead (when nothing is uncommitted or unsaved), since gh stack keeps a whole stack in one worktree. The title bar has Pull Default Branch (fetch, then fast-forward the root worktree when it's clean) and Merge Parent (hidden for gh-stack branches, where restacking is the tool).
+1. **Stack** shows the current branch's chain of parents down to the default branch and the branches stacked on top of it, with each one's PR, commits ahead of and behind its parent, and whether a gh stack says it needs a rebase. Switch on a row opens the branch's worktree in this window, creating one with `wtp` when it has none. Layers of the same gh stack switch in place instead (when nothing is uncommitted or unsaved), and so does the default branch's row when this window is the root worktree. The title bar has Pull Default Branch (fetch, then fast-forward the root worktree when it's clean) and Merge Parent (hidden for gh-stack branches, where restacking is the tool).
 2. **Changes** lists the files changed on this branch against its parent, including uncommitted and untracked files, as a folder tree. Files open as native diffs with the live file on the right. The milestone button narrows the list to changes since the branch's checkpoint.
-3. **Leave comments** with the native commenting UI (the `+` in the gutter). Comments are kept per branch and never leave your machine. GitHub threads for the branch's own PR render inline read-only, and you can quote one into a local comment.
-4. **Hand off to the agent** with `Revu: Copy All Comments`, which puts the branch's comments on your clipboard as structured markdown: file paths, line ranges, fenced code context, quoted PR threads and your notes.
+3. **Checkpoint** tracks which commits you've already reviewed (see [Checkpoints](#checkpoints)).
+
+While reading diffs, leave comments with the native commenting UI (the `+` in the gutter). Comments are kept per branch and never leave your machine. GitHub threads for the branch's own PR render inline read-only, and you can quote one into a local comment. When you're done, `Revu: Copy All Comments as Markdown` puts the branch's comments on your clipboard as structured markdown (file paths, line ranges, fenced code context, quoted PR threads and your notes) to hand to your agent.
 
 Changes made outside the editor (an agent committing in another worktree, a fetch, a checkpoint moved from the terminal) show up when the window regains focus.
 
@@ -50,11 +51,14 @@ The Checkpoint view tracks what you've already reviewed on the current branch. I
 
 ## Read-only by design
 
-Revu never writes to GitHub. No replies, no review submission, no mutations of any kind; a guard test fails the suite if a write path ever appears in the source. That's deliberate: local comments are drafts for an agent conversation, and it should be impossible to accidentally publish one. Posting real PR feedback stays with the GitHub extension.
+Revu never writes to GitHub. No replies, no review submission, no pushes, no mutations of any kind; a guard test fails the suite if a write path ever appears in the source. That's deliberate: local comments are drafts for an agent conversation, and it should be impossible to accidentally publish one. Posting real PR feedback stays with the GitHub extension.
+
+It does change your local repo when you ask it to: Pull Default Branch fetches and fast-forwards the root worktree, Merge Parent fetches and merges, Switch runs `git switch` or `wtp add`, Compare With… writes `branch.<name>.revuParent` to git config, and checkpoints are refs under `refs/revu/`.
 
 ## Requirements
 
-- `git` on PATH.
+- `git` 2.38 or newer on PATH (merge commit rows use `git merge-tree --write-tree`).
+- An `origin/HEAD` ref, or a local `main` or `master`, so Revu can find the default branch. Without one the Changes view reports that it can't read the branch.
 - `gh` (authenticated) for PR state and threads. Optional; without it Revu skips the GitHub context and finds parents from git alone.
 - The `gh stack` extension, optional, for exact parents of gh-stack layers.
 - `wtp` on the PATH VS Code sees, for switching to a branch that has no worktree yet.

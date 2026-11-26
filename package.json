@@ -1,7 +1,7 @@
 {
   "name": "revu",
   "displayName": "Revu",
-  "description": "Guided review and local review comments for AI-assisted workflows",
+  "description": "Branch-aware review and local review comments for AI-assisted workflows",
   "version": "0.0.1",
   "publisher": "broderick-westrope",
   "repository": {
