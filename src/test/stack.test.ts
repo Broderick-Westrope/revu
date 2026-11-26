@@ -296,4 +296,56 @@ suite('stack parent resolution', () => {
 
     assert.strictEqual(result.current?.parent, 'main');
   });
+  test('a branch restacked after its parent was rebased keeps the parent', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    const oldA = await commitFile(repo, 'a1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['checkout', '-q', 'main']);
+    await commitFile(repo, 'main2.txt');
+    await git(repo, ['checkout', '-q', 'a']);
+    await git(repo, ['rebase', '-q', 'main']);
+    await git(repo, ['rebase', '-q', '--onto', 'a', oldA, 'b']);
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.branch, 'b');
+    assert.strictEqual(result.current?.parent, 'a');
+    const diff = await git(repo, ['diff', '--name-status', result.current!.diffBase]);
+    assert.deepStrictEqual(changedNames(diff), ['b1.txt']);
+  });
+
+  test('a gh stack base below the merge-base with the parent is ignored', async () => {
+    const repo = await localRepo();
+    const stale = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    const fresh = await commitFile(repo, 'main2.txt');
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    const ghStack = {
+      trunk: 'main',
+      branches: [{ name: 'a', base: stale, isMerged: false, needsRebase: false }],
+    };
+
+    const result = await resolveStack(repo, { prs: [], ghStack });
+
+    assert.strictEqual(result.current?.diffBase, fresh);
+  });
+
+  test('without a creation reflog the fallback never picks a branch cut from this one', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'd']);
+    await commitFile(repo, 'd1.txt');
+    await git(repo, ['checkout', '-q', 'b']);
+    await commitFile(repo, 'b2.txt');
+    fs.rmSync(path.join(repo, '.git', 'logs', 'refs', 'heads', 'b'));
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.parent, 'main');
+    assert.strictEqual(result.current?.warning, undefined);
+    assert.strictEqual(result.branches.get('d')?.parent, 'b');
+  });
 });

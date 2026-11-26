@@ -69,6 +69,7 @@ interface BranchGraph {
   remoteRefs: Set<string>;
   parents: Map<string, string[]>;
   creations: Map<string, Creation>;
+  creationsOffTrunk: Set<string>;
   overrides: Map<string, string>;
 }
 
@@ -123,6 +124,25 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
     }
   }
 
+  const creationsOffTrunk = new Set<string>();
+  const creationShas = [...new Set([...creations.values()].map((c) => c.sha))];
+  if (creationShas.length > 0) {
+    const reachable = await git(repoRoot, [
+      'log',
+      '--format=%H',
+      '--ignore-missing',
+      ...creationShas,
+      '--not',
+      trunk.ref,
+    ]);
+    const offTrunk = new Set(reachable.split('\n').filter(Boolean));
+    for (const sha of creationShas) {
+      if (offTrunk.has(sha)) {
+        creationsOffTrunk.add(sha);
+      }
+    }
+  }
+
   const overrides = new Map<string, string>();
   try {
     const configOutput = await git(repoRoot, ['config', '--get-regexp', '^branch\\..*\\.revuparent$']);
@@ -139,7 +159,7 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
   } catch {
   }
 
-  return { trunk, tips, remoteRefs, parents, creations, overrides };
+  return { trunk, tips, remoteRefs, parents, creations, creationsOffTrunk, overrides };
 }
 
 function readCreation(reflogPath: string): Creation | undefined {
@@ -280,10 +300,10 @@ class Resolver {
 
   private infer(branch: string): BranchResolution {
     const creation = this.graph.creations.get(branch);
-    if (creation) {
-      if (!this.graph.parents.has(creation.sha)) {
-        return this.trunkResolution(branch);
-      }
+    if (creation && !this.graph.creationsOffTrunk.has(creation.sha)) {
+      return this.trunkResolution(branch);
+    }
+    if (creation && this.graph.parents.has(creation.sha)) {
       const candidates = this.otherBranches(branch).filter(
         (candidate) =>
           this.ancestors(this.tip(candidate)).has(creation.sha) &&
@@ -300,7 +320,8 @@ class Resolver {
     const own = this.ancestors(tip);
     const forks = this.otherBranches(branch).filter((candidate) => {
       const theirs = this.ancestors(this.tip(candidate));
-      return !theirs.has(tip) && [...own].some((sha) => theirs.has(sha));
+      const createdFromOwnHistory = own.has(this.graph.creations.get(candidate)?.sha ?? '');
+      return !createdFromOwnHistory && !theirs.has(tip) && [...own].some((sha) => theirs.has(sha));
     });
     if (forks.length > 0) {
       return this.nearest(branch, forks, true);
@@ -322,7 +343,7 @@ class Resolver {
     if (!theirs) {
       return false;
     }
-    if (!this.graph.parents.has(theirs.sha)) {
+    if (!this.graph.creationsOffTrunk.has(theirs.sha)) {
       return true;
     }
     return theirs.sha !== creationSha && this.ancestors(creationSha).has(theirs.sha);
@@ -393,8 +414,15 @@ export async function resolveStack(repoRoot: string, external: StackExternal): P
 }
 
 async function diffBaseFor(repoRoot: string, resolution: BranchResolution): Promise<string> {
-  if (resolution.stackBase && (await isAncestor(repoRoot, resolution.stackBase, 'HEAD'))) {
-    return resolution.stackBase;
+  const mergeBase = (await git(repoRoot, ['merge-base', 'HEAD', resolution.parentRef])).trim();
+  const stackBase = resolution.stackBase;
+  if (
+    stackBase &&
+    stackBase !== mergeBase &&
+    (await isAncestor(repoRoot, stackBase, 'HEAD')) &&
+    (await isAncestor(repoRoot, mergeBase, stackBase))
+  ) {
+    return stackBase;
   }
-  return (await git(repoRoot, ['merge-base', 'HEAD', resolution.parentRef])).trim();
+  return mergeBase;
 }
