@@ -12,7 +12,11 @@ export class CommentStore {
   constructor(private readonly memento: vscode.Memento) {}
 
   async setBranch(branch: string | undefined): Promise<void> {
+    if (branch === this.branch) {
+      return;
+    }
     this.branch = branch;
+    this.emitter.fire();
   }
 
   all(): LocalComment[] {

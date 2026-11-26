@@ -129,4 +129,20 @@ suite('comment store', () => {
     );
     assert.deepStrictEqual(memento.keys(), ['revu.comments.branch:a']);
   });
+
+  test('setBranch fires onDidChange only when the branch changes', async () => {
+    const store = await storeOn(stubMemento(), 'a');
+    let fired = 0;
+    store.onDidChange(() => {
+      fired += 1;
+    });
+    await store.setBranch('a');
+    assert.strictEqual(fired, 0);
+    await store.setBranch('b');
+    assert.strictEqual(fired, 1);
+    await store.setBranch(undefined);
+    assert.strictEqual(fired, 2);
+    await store.setBranch(undefined);
+    assert.strictEqual(fired, 2);
+  });
 });
