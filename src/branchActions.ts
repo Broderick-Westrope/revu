@@ -162,3 +162,7 @@ export async function resetParentOverride(cwd: string, branch: string): Promise<
     }
   }
 }
+
+export async function switchBranch(cwd: string, branch: string): Promise<void> {
+  await git(cwd, ['switch', branch]);
+}

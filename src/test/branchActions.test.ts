@@ -13,6 +13,7 @@ import {
   pullDefaultBranch,
   resetParentOverride,
   setParentOverride,
+  switchBranch,
 } from '../branchActions';
 import { resolveStack } from '../stack';
 
@@ -361,5 +362,16 @@ suite('branch actions', () => {
 
       await resetParentOverride(repo, 'main');
     });
+  });
+
+  test('switchBranch checks out the branch and keeps untracked files', async () => {
+    const repo = await localRepo();
+    await git(repo, ['branch', 'a']);
+    fs.writeFileSync(path.join(repo, 'scratch.txt'), 'scratch\n');
+
+    await switchBranch(repo, 'a');
+
+    assert.strictEqual((await git(repo, ['symbolic-ref', '--short', 'HEAD'])).trim(), 'a');
+    assert.ok(fs.existsSync(path.join(repo, 'scratch.txt')));
   });
 });
