@@ -162,6 +162,13 @@ suite('branch actions', () => {
       assert.deepStrictEqual(planSwitch({ ...base, target: 'main' }), { kind: 'openFolder', path: '/root' });
     });
 
+    test('the trunk refuses to switch in place with uncommitted or unsaved changes', () => {
+      const worktrees = { main: '/wt/a', byBranch: new Map([['a', '/wt/a']]) };
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'main', worktrees, dirty: true }), {
+        kind: 'refuseDirty',
+      });
+    });
+
     test('the trunk switches in place when this is the main worktree', () => {
       const worktrees = { main: '/wt/a', byBranch: new Map([['a', '/wt/a']]) };
       assert.deepStrictEqual(planSwitch({ ...base, target: 'main', worktrees }), { kind: 'switch' });

@@ -62,16 +62,18 @@ export type SwitchPlan =
   | { kind: 'openFolder'; path: string }
   | { kind: 'switch' }
   | { kind: 'offerWorktree' }
-  | { kind: 'createWorktree' };
+  | { kind: 'createWorktree' }
+  | { kind: 'refuseDirty' };
 
 export function planSwitch(input: SwitchInput): SwitchPlan {
   if (input.target === input.current) {
     return { kind: 'none' };
   }
   if (input.target === input.trunk) {
-    return input.worktrees.main === input.currentWorktree
-      ? { kind: 'switch' }
-      : { kind: 'openFolder', path: input.worktrees.main };
+    if (input.worktrees.main !== input.currentWorktree) {
+      return { kind: 'openFolder', path: input.worktrees.main };
+    }
+    return input.dirty ? { kind: 'refuseDirty' } : { kind: 'switch' };
   }
   const elsewhere = input.worktrees.byBranch.get(input.target);
   if (elsewhere !== undefined && elsewhere !== input.currentWorktree) {

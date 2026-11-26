@@ -23,7 +23,7 @@ function errorText(err: unknown): string {
 
 function wtp(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('wtp', args, { cwd }, (err, stdout, stderr) => {
+    execFile('wtp', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         reject(Object.assign(err, { stderr }));
       } else {
@@ -40,17 +40,25 @@ function openFolder(folder: string, forceNewWindow: boolean): Thenable<unknown> 
 }
 
 async function createWorktree(root: string, branch: string): Promise<void> {
-  let folder: string;
+  let folder: string | undefined;
   try {
     folder = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Revu: creating a worktree for ${branch}` },
       async () => {
         await wtp(root, ['add', branch]);
-        return (await wtp(root, ['cd', branch])).trim();
+        return (await listWorktrees(root)).byBranch.get(branch);
       }
     );
   } catch (err) {
-    void vscode.window.showErrorMessage(`Revu: couldn't create a worktree for ${branch}: ${errorText(err)}`);
+    const text =
+      (err as { code?: string }).code === 'ENOENT'
+        ? 'wtp is not on the PATH VS Code was started with'
+        : errorText(err);
+    void vscode.window.showErrorMessage(`Revu: couldn't create a worktree for ${branch}: ${text}`);
+    return;
+  }
+  if (!folder) {
+    void vscode.window.showErrorMessage(`Revu: wtp finished but no worktree has ${branch} checked out.`);
     return;
   }
   await openFolder(folder, false);
@@ -88,6 +96,11 @@ export async function switchToBranchCommand(
       case 'switch':
         await switchBranch(root, node.branch);
         await refresh({ external: true });
+        return;
+      case 'refuseDirty':
+        void vscode.window.showWarningMessage(
+          `Revu: commit or save your changes before switching to ${node.branch}.`
+        );
         return;
       case 'createWorktree':
         await createWorktree(root, node.branch);
