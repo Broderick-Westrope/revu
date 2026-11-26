@@ -83,17 +83,15 @@ suite('checkpoint tree provider', () => {
     }
   });
 
-  test('implicit state lists working tree root first then commits newest-first', async () => {
+  test('implicit state lists only commits newest-first', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     const { provider, captured } = makeProvider(repo);
     const roots = await provider.getChildren();
-    assert.strictEqual(roots[0].kind, 'workingTreeRoot');
-    const commits = commitNodes(roots);
     assert.deepStrictEqual(
-      commits.map((n) => n.commit.sha),
+      roots.map((n) => (n.kind === 'commit' ? n.commit.sha : n.kind)),
       [c3, c2]
     );
     assert.strictEqual(captured.message, undefined);
@@ -159,18 +157,14 @@ suite('checkpoint tree provider', () => {
     }
   });
 
-  test('working tree root children include untracked files', async () => {
+  test('a dirty working tree shows in the summary description', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     await commitFile(repo, 'f1.txt', 'one\n');
     fs.writeFileSync(path.join(repo, 'untracked.txt'), 'new\n');
     const { provider, captured } = makeProvider(repo);
-    const roots = await provider.getChildren();
+    await provider.getChildren();
     assert.strictEqual(captured.description, '1 commit + dirty working tree');
-    const files = await provider.getChildren(roots[0]);
-    const paths = files.map((n) => (n.kind === 'workingTreeFile' ? n.file.path : ''));
-    assert.ok(paths.includes('f1.txt'));
-    assert.ok(paths.includes('untracked.txt'));
   });
 
   test('after markSafe later commits stay unreviewed and earlier ones render as reviewed', async () => {

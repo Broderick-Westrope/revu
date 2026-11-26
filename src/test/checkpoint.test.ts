@@ -10,7 +10,6 @@ import {
   removeCheckpoint,
   reviewedCommits,
   unreviewedCommits,
-  workingTreeSummary,
 } from '../checkpoint';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
@@ -272,52 +271,6 @@ suite('unreviewed range', () => {
     await markSafe(repo, 'feature', c3, c2);
     commits = await unreviewedCommits(repo, c3, 'feature');
     assert.deepStrictEqual(commits, []);
-  });
-
-  test('workingTreeSummary matches git diff --name-status plus untracked files', async () => {
-    const repo = await makeRepo();
-    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
-    await git(repo, ['checkout', '-b', 'feature']);
-    await commitFile(repo, 'f1.txt', 'one\n');
-    await markSafe(repo, 'feature', mainTip);
-    fs.writeFileSync(path.join(repo, 'base.txt'), 'modified content\n');
-    fs.writeFileSync(path.join(repo, 'untracked.txt'), 'untracked\n');
-    const { files, dirty } = await workingTreeSummary(repo, mainTip);
-    assert.strictEqual(dirty, true);
-    const untracked = files.filter((f) => f.status === 'U').map((f) => f.path);
-    assert.deepStrictEqual(untracked, ['untracked.txt']);
-    const rawDiff = await git(repo, [
-      'diff',
-      '--name-status',
-      '-M',
-      'refs/revu/checkpoint/feature',
-    ]);
-    const expectedTracked = rawDiff
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => line.split('\t').pop())
-      .sort();
-    const actualTracked = files
-      .filter((f) => f.status !== 'U')
-      .map((f) => f.path)
-      .sort();
-    assert.deepStrictEqual(actualTracked, expectedTracked);
-    const rawUntracked = await git(repo, ['ls-files', '--others', '--exclude-standard']);
-    const expectedUntracked = rawUntracked.split('\n').filter((line) => line.trim());
-    assert.deepStrictEqual(untracked, expectedUntracked);
-  });
-
-  test('workingTreeSummary reports a clean working tree as not dirty', async () => {
-    const repo = await makeRepo();
-    const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
-    await git(repo, ['checkout', '-b', 'feature']);
-    await commitFile(repo, 'f1.txt', 'one\n');
-    const { files, dirty } = await workingTreeSummary(repo, mainTip);
-    assert.strictEqual(dirty, false);
-    assert.deepStrictEqual(
-      files.map((f) => f.path),
-      ['f1.txt']
-    );
   });
 });
 

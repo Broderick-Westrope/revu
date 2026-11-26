@@ -1,13 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import {
-  CommitFileNode,
-  CommitNode,
-  WorkingTreeFileNode,
-  WorkingTreeRootNode,
-} from '../checkpointTree';
-import { workingTreeSummary } from '../checkpoint';
+import { CommitFileNode, CommitNode, WorkingTreeFileNode } from '../checkpointTree';
 import { ChangedFile, changedFiles, commitChangedFiles } from '../git';
 import { EMPTY_REF, GitUriQuery, REVU_GIT_SCHEME, makeGitUri } from '../gitContentProvider';
 import { showDiff } from './openDiff';
@@ -75,15 +69,6 @@ export async function openCommitDiff(node: CommitNode): Promise<void> {
 
 export async function openWorkingTreeFileDiff(node: WorkingTreeFileNode): Promise<void> {
   await showDiff(node.file, { repoRoot: node.repoRoot, baseRef: node.checkpointSha });
-}
-
-export async function openWorkingTreeDiff(node: WorkingTreeRootNode): Promise<void> {
-  const summary = await workingTreeSummary(node.repoRoot, node.checkpointSha);
-  if (summary.files.length === 0) {
-    void vscode.window.showInformationMessage('Revu: no unreviewed changes');
-    return;
-  }
-  await showDiff(summary.files[0], { repoRoot: node.repoRoot, baseRef: node.checkpointSha });
 }
 
 export async function compareWithWorkingTree(node?: CommitFileNode): Promise<void> {

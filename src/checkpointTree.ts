@@ -5,9 +5,14 @@ import {
   getCheckpointState,
   reviewedCommits,
   unreviewedCommits,
-  workingTreeSummary,
 } from './checkpoint';
-import { ChangedFile, CommitInfo, changedFiles, commitChangedFiles } from './git';
+import {
+  ChangedFile,
+  CommitInfo,
+  changedFiles,
+  commitChangedFiles,
+  hasUncommittedChanges,
+} from './git';
 import { EMPTY_REF } from './gitContentProvider';
 
 export interface CommitNode {
@@ -24,12 +29,6 @@ export interface CommitFileNode {
   file: ChangedFile;
   commitSha: string;
   parentSha: string;
-  repoRoot: string;
-}
-
-export interface WorkingTreeRootNode {
-  kind: 'workingTreeRoot';
-  checkpointSha: string;
   repoRoot: string;
 }
 
@@ -54,7 +53,6 @@ export interface ReviewedOverflowNode {
 export type CheckpointNode =
   | CommitNode
   | CommitFileNode
-  | WorkingTreeRootNode
   | WorkingTreeFileNode
   | RecoveryRootNode
   | ReviewedOverflowNode;
@@ -109,15 +107,6 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
           file,
           commitSha: element.commit.sha,
           parentSha: element.parentSha,
-          repoRoot: element.repoRoot,
-        }));
-      }
-      case 'workingTreeRoot': {
-        const summary = await workingTreeSummary(element.repoRoot, element.checkpointSha);
-        return summary.files.map((file) => ({
-          kind: 'workingTreeFile',
-          file,
-          checkpointSha: element.checkpointSha,
           repoRoot: element.repoRoot,
         }));
       }
@@ -178,20 +167,6 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         };
         return item;
       }
-      case 'workingTreeRoot': {
-        const item = new vscode.TreeItem(
-          'All unreviewed changes',
-          vscode.TreeItemCollapsibleState.Collapsed
-        );
-        item.contextValue = 'revu.workingTreeRoot';
-        item.iconPath = new vscode.ThemeIcon('diff-multiple');
-        item.command = {
-          command: 'revu.openWorkingTreeDiff',
-          title: 'Open Working Tree Diff',
-          arguments: [element],
-        };
-        return item;
-      }
       case 'workingTreeFile': {
         const item = new vscode.TreeItem(
           path.basename(element.file.path),
@@ -243,22 +218,21 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         return [{ kind: 'recoveryRoot', orphanedSha: state.sha, repoRoot: this.repoRoot }];
       case 'explicit':
       case 'implicit': {
-        const [commits, summary, reviewed] = await Promise.all([
+        const [commits, dirty, reviewed] = await Promise.all([
           unreviewedCommits(this.repoRoot, state.sha, state.branch),
-          workingTreeSummary(this.repoRoot, state.sha),
+          hasUncommittedChanges(this.repoRoot),
           reviewedCommits(this.repoRoot, state.sha, implicitBase),
         ]);
         this.update(
           undefined,
           summaryDescription(
             commits.length,
-            summary.dirty,
+            dirty,
             reviewed.commits.length,
             reviewed.truncated
           )
         );
         const nodes: CheckpointNode[] = [
-          { kind: 'workingTreeRoot', checkpointSha: state.sha, repoRoot: this.repoRoot },
           ...commits.map(
             (commit): CommitNode => ({
               kind: 'commit',

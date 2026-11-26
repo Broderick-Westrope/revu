@@ -1,12 +1,9 @@
 import {
-  ChangedFile,
   CommitInfo,
   EMPTY_REF_SHA,
-  changedFiles,
   currentBranch,
   defaultBranch,
   deleteRef,
-  hasUncommittedChanges,
   isAncestor,
   isDetachedHead,
   listCommits,
@@ -119,13 +116,4 @@ export async function reviewedCommits(
     commits: commits.slice(0, REVIEWED_COMMITS_CAP),
     truncated: commits.length > REVIEWED_COMMITS_CAP,
   };
-}
-
-export async function workingTreeSummary(
-  repoRoot: string,
-  checkpointSha: string
-): Promise<{ files: ChangedFile[]; dirty: boolean }> {
-  const files = await changedFiles(repoRoot, checkpointSha, true);
-  const dirty = await hasUncommittedChanges(repoRoot);
-  return { files, dirty };
 }
