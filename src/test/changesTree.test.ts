@@ -201,28 +201,7 @@ suite('changes tree provider', () => {
   });
 });
 
-suite('review state change check', () => {
-  test('refreshIfChanged skips when git state is unchanged and refreshes after a commit', async () => {
-    const repo = await makeStack();
-    await commitFile(repo, 'first.txt');
-    const state = new ReviewState(repo, async () => ({ prs: [] }));
-    await state.refresh({ external: true });
-    let fired = 0;
-    state.onDidChange(() => fired++);
-
-    assert.strictEqual(await state.refreshIfChanged(), false);
-    await git(repo, ['config', 'branch.b.revuParent', 'main']);
-    assert.strictEqual(await state.refreshIfChanged(), true);
-    await commitFile(repo, 'second.txt');
-    assert.strictEqual(await state.refreshIfChanged(), true);
-    fs.writeFileSync(path.join(repo, 'agent-scratch.txt'), 'uncommitted\n');
-    assert.strictEqual(await state.refreshIfChanged(), true);
-    assert.strictEqual(fired, 3);
-    fs.rmSync(repo, { recursive: true, force: true });
-  });
-});
-
-suite('review state errors', () => {
+suite('changes tree errors', () => {
   test('a failed refresh reports the error in the Changes view instead of going stale', async () => {
     const repo = await makeStack();
     await commitFile(repo, 'first.txt');
@@ -234,105 +213,5 @@ suite('review state errors', () => {
     assert.strictEqual(state.branch, 'unrelated');
     assert.deepStrictEqual(await provider.getChildren(), []);
     assert.ok(captured.message?.startsWith('Could not read this branch:'));
-  });
-});
-
-suite('review state two-phase refresh', () => {
-  test('git state is published before slow PR data arrives', async () => {
-    const repo = await makeStack();
-    await commitFile(repo, 'first.txt');
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const state = new ReviewState(repo, async () => {
-      await gate;
-      return { prs: [{ number: 9, url: 'u', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] };
-    });
-    const firstChange = new Promise<void>((resolve) => state.onDidChange(() => resolve()));
-
-    const done = state.refresh({ external: true });
-    await firstChange;
-
-    assert.strictEqual(state.snapshot?.stack.current?.branch, 'b');
-    const prNumber = (): number | undefined => state.snapshot?.stack.current?.pr?.number;
-    assert.strictEqual(prNumber(), undefined);
-    release();
-    await done;
-    assert.strictEqual(prNumber(), 9);
-    fs.rmSync(repo, { recursive: true, force: true });
-  });
-});
-
-suite('review state PR data', () => {
-  test('a failed PR fetch keeps the last good PR list', async () => {
-    const repo = await makeStack();
-    await commitFile(repo, 'first.txt');
-    let calls = 0;
-    const state = new ReviewState(repo, async () => {
-      calls++;
-      return calls === 1
-        ? { prs: [{ number: 4, url: 'u', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] }
-        : { prs: [], prsFailed: true };
-    });
-    await state.refresh({ external: true });
-    await state.refresh({ external: true });
-
-    assert.strictEqual(state.snapshot?.stack.current?.pr?.number, 4);
-    fs.rmSync(repo, { recursive: true, force: true });
-  });
-});
-
-suite('review state gh stack data', () => {
-  test('a failed gh stack read keeps the last good stack', async () => {
-    const repo = await makeStack();
-    await commitFile(repo, 'first.txt');
-    const ghStack = {
-      trunk: 'main',
-      branches: [
-        { name: 'a', base: '', isMerged: false, needsRebase: false },
-        { name: 'b', base: '', isMerged: false, needsRebase: false },
-      ],
-    };
-    let calls = 0;
-    const state = new ReviewState(repo, async () => {
-      calls++;
-      return calls === 1 ? { prs: [], ghStack } : { prs: [], ghStackFailed: true };
-    });
-    await state.refresh({ external: true });
-    await state.refresh({ external: true });
-
-    assert.strictEqual(state.snapshot?.stack.current?.source, 'gh-stack');
-    fs.rmSync(repo, { recursive: true, force: true });
-  });
-});
-
-suite('review state overlapping fetches', () => {
-  test('a slow fetch for a branch no longer checked out does not overwrite newer data', async () => {
-    const repo = await makeStack();
-    await commitFile(repo, 'first.txt');
-    let releaseSlow: () => void = () => undefined;
-    const slow = new Promise<void>((resolve) => {
-      releaseSlow = resolve;
-    });
-    let calls = 0;
-    const state = new ReviewState(repo, async () => {
-      calls++;
-      if (calls === 1) {
-        await slow;
-        return { prs: [{ number: 1, url: 'u1', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] };
-      }
-      return { prs: [{ number: 2, url: 'u2', state: 'OPEN', headRefName: 'a', baseRefName: 'main' }] };
-    });
-    const first = state.refresh({ external: true });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await git(repo, ['checkout', '-q', 'a']);
-    await state.refresh({ external: true });
-    releaseSlow();
-    await first;
-
-    assert.strictEqual(state.snapshot?.stack.current?.branch, 'a');
-    assert.strictEqual(state.snapshot?.stack.current?.pr?.number, 2);
-    fs.rmSync(repo, { recursive: true, force: true });
   });
 });
