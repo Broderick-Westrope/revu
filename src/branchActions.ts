@@ -148,3 +148,17 @@ export async function mergeParent(
   await updateRef(cwd, ref, after, before);
   return { kind: 'merged', checkpointMoved: true };
 }
+
+export async function setParentOverride(cwd: string, branch: string, parent: string): Promise<void> {
+  await git(cwd, ['config', `branch.${branch}.revuParent`, parent]);
+}
+
+export async function resetParentOverride(cwd: string, branch: string): Promise<void> {
+  try {
+    await git(cwd, ['config', '--unset', `branch.${branch}.revuParent`]);
+  } catch (err) {
+    if ((err as { code?: number }).code !== 5) {
+      throw err;
+    }
+  }
+}

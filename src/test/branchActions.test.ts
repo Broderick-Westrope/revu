@@ -11,7 +11,10 @@ import {
   mergeParent,
   planSwitch,
   pullDefaultBranch,
+  resetParentOverride,
+  setParentOverride,
 } from '../branchActions';
+import { resolveStack } from '../stack';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -322,6 +325,41 @@ suite('branch actions', () => {
 
       assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
       assert.strictEqual(await rev(repo, 'refs/revu/checkpoint/b'), checkpoint);
+    });
+  });
+
+  suite('parent override', () => {
+    test('setParentOverride makes the named branch the parent', async () => {
+      const repo = await localRepo();
+      await git(repo, ['checkout', '-q', '-b', 'a']);
+      await commitFile(repo, 'a1.txt');
+      await git(repo, ['checkout', '-q', '-b', 'b']);
+      await commitFile(repo, 'b1.txt');
+
+      await setParentOverride(repo, 'b', 'main');
+
+      assert.strictEqual((await git(repo, ['config', 'branch.b.revuParent'])).trim(), 'main');
+      const current = (await resolveStack(repo, { prs: [] })).current;
+      assert.strictEqual(current?.parent, 'main');
+      assert.strictEqual(current?.source, 'override');
+    });
+
+    test('resetParentOverride restores the resolved parent', async () => {
+      const repo = await localRepo();
+      await git(repo, ['checkout', '-q', '-b', 'a']);
+      await commitFile(repo, 'a1.txt');
+      await git(repo, ['checkout', '-q', '-b', 'b']);
+      await setParentOverride(repo, 'b', 'main');
+
+      await resetParentOverride(repo, 'b');
+
+      assert.strictEqual((await resolveStack(repo, { prs: [] })).current?.parent, 'a');
+    });
+
+    test('resetParentOverride without an override does nothing', async () => {
+      const repo = await localRepo();
+
+      await resetParentOverride(repo, 'main');
     });
   });
 });
