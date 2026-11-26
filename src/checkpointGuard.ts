@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CheckpointState, getCheckpointState } from './checkpoint';
 import { changedFiles } from './git';
 import { showDiff } from './commands/openDiff';
+import { logWarning } from './log';
 
 export type GuardAction = 'orphanPrompt' | 'none';
 
@@ -70,7 +71,7 @@ export function registerCheckpointGuard(
         await promptOrphan(root, state);
       }
     } catch (err) {
-      console.warn('Revu: checkpoint guard check failed', err);
+      logWarning(`checkpoint guard check failed: ${(err as Error).message}`);
     } finally {
       checking = false;
     }

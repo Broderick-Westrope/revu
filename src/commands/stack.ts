@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { mergeParent, planSwitch, pullDefaultBranch, PullResult } from '../branchActions';
 import { git, hasTrackedChanges, listWorktrees } from '../git';
@@ -5,6 +6,11 @@ import { ReviewState } from '../reviewState';
 import { resetParentOverride, setParentOverride } from '../stack';
 import { StackNode } from '../stackTree';
 import { addWorktree } from '../wtp';
+
+function isInside(root: string, file: string): boolean {
+  const rel = path.relative(root, file);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
 
 export type Refresh = (options?: { external?: boolean }) => Promise<void>;
 
@@ -62,7 +68,9 @@ export async function switchToBranchCommand(
         stack.current?.inGhStack === true && stack.branches.get(node.branch)?.inGhStack === true,
       dirty:
         (await hasTrackedChanges(root)) ||
-        vscode.workspace.textDocuments.some((doc) => doc.isDirty && doc.uri.scheme === 'file'),
+        vscode.workspace.textDocuments.some(
+          (doc) => doc.isDirty && doc.uri.scheme === 'file' && isInside(root, doc.uri.fsPath)
+        ),
     });
     switch (plan.kind) {
       case 'none':
@@ -113,7 +121,7 @@ export async function openPrCommand(node: StackNode | undefined): Promise<void> 
 }
 
 function pullMessage(result: PullResult, trunk: string): { warn: boolean; text: string } {
-  const behind = `so ${trunk} there stayed behind origin/${trunk}. Diffs already use origin/${trunk}.`;
+  const behind = `so ${trunk} in the root worktree stayed behind origin/${trunk}. Diffs already use origin/${trunk}.`;
   switch (result.kind) {
     case 'fastForwarded':
       return { warn: false, text: `Revu: fast-forwarded ${trunk} in the root worktree.` };

@@ -34,23 +34,24 @@ import { GitContentProvider, REVU_GIT_SCHEME } from './gitContentProvider';
 import { registerGitWatcher } from './gitWatcher';
 import { fetchStackExternal } from './github/gh';
 import { GithubThreadRenderer } from './github/threadRenderer';
+import { disposeLog, logWarning } from './log';
 import { ReviewState } from './reviewState';
 import { StackNode, registerStackTree } from './stackTree';
 
 let reviewState: ReviewState | undefined;
 
-function refreshAfterCheckpointChange(): void {
-  void reviewState?.refresh({ external: false });
-}
-
-async function refreshAfterAction(options: { external?: boolean } = {}): Promise<void> {
+async function refreshReview(options: { external?: boolean } = {}): Promise<void> {
   await reviewState?.refresh({ external: options.external ?? false });
 }
 
-function withState(
-  action: (state: ReviewState) => Promise<void>
-): () => Promise<void> | undefined {
-  return () => (reviewState ? action(reviewState) : undefined);
+function refreshAfterCheckpointChange(): void {
+  void refreshReview();
+}
+
+function withState<T extends unknown[]>(
+  action: (state: ReviewState, ...args: T) => Promise<void>
+): (...args: T) => Promise<void> | undefined {
+  return (...args: T) => (reviewState ? action(reviewState, ...args) : undefined);
 }
 
 async function setCheckpointMode(on: boolean): Promise<void> {
@@ -58,7 +59,6 @@ async function setCheckpointMode(on: boolean): Promise<void> {
     return;
   }
   reviewState.setCheckpointMode(on);
-  await vscode.commands.executeCommand('setContext', 'revu.checkpointMode', on);
   await reviewState.refresh({ external: false });
 }
 
@@ -66,6 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const renderer = new GithubThreadRenderer();
   context.subscriptions.push(
     renderer,
+    new vscode.Disposable(disposeLog),
     vscode.workspace.registerTextDocumentContentProvider(REVU_GIT_SCHEME, new GitContentProvider())
   );
   const store = new CommentStore(context.workspaceState);
@@ -74,41 +75,39 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('revu.quoteComment', (comment: vscode.Comment | undefined) =>
       quoteComment(manager, comment)
     ),
-    vscode.commands.registerCommand('revu.refreshPrThreads', () =>
-      reviewState
-        ? refreshPrThreads(renderer, reviewState.repoRoot, { announce: true })
-        : undefined
+    vscode.commands.registerCommand(
+      'revu.refreshPrThreads',
+      withState((state) => refreshPrThreads(renderer, state.repoRoot, { announce: true }))
     ),
-    vscode.commands.registerCommand('revu.refreshStack', () => reviewState?.refresh()),
-    vscode.commands.registerCommand('revu.switchToBranch', (node: StackNode) =>
-      reviewState ? switchToBranchCommand(reviewState, node, refreshAfterAction) : undefined
+    vscode.commands.registerCommand('revu.refreshStack', () => refreshReview({ external: true })),
+    vscode.commands.registerCommand(
+      'revu.switchToBranch',
+      withState((state, node: StackNode) => switchToBranchCommand(state, node, refreshReview))
     ),
     vscode.commands.registerCommand('revu.openBranchInNewWindow', openBranchInNewWindowCommand),
     vscode.commands.registerCommand('revu.openPr', openPrCommand),
     vscode.commands.registerCommand(
       'revu.pullDefaultBranch',
-      withState((state) => pullDefaultBranchCommand(state, refreshAfterAction))
+      withState((state) => pullDefaultBranchCommand(state, refreshReview))
     ),
     vscode.commands.registerCommand(
       'revu.mergeParent',
-      withState((state) => mergeParentCommand(state, refreshAfterAction))
+      withState((state) => mergeParentCommand(state, refreshReview))
     ),
     vscode.commands.registerCommand(
       'revu.compareWith',
-      withState((state) => compareWithCommand(state, refreshAfterAction))
+      withState((state) => compareWithCommand(state, refreshReview))
     ),
     vscode.commands.registerCommand(
       'revu.resetParent',
-      withState((state) => resetParentCommand(state, refreshAfterAction))
+      withState((state) => resetParentCommand(state, refreshReview))
     ),
     vscode.commands.registerCommand('revu.showSinceCheckpoint', () => setCheckpointMode(true)),
     vscode.commands.registerCommand('revu.showAllChanges', () => setCheckpointMode(false)),
     vscode.commands.registerCommand('revu.openChangesFile', (node: ChangesFileNode) =>
       showDiff(node.file, { repoRoot: node.repoRoot, baseRef: node.baseRef })
     ),
-    vscode.commands.registerCommand('revu.refreshCheckpoint', () =>
-      reviewState?.refresh({ external: false })
-    ),
+    vscode.commands.registerCommand('revu.refreshCheckpoint', () => refreshReview()),
     vscode.commands.registerCommand('revu.markSafe', (node) =>
       markSafeCommand(node, refreshAfterCheckpointChange)
     ),
@@ -174,6 +173,11 @@ function registerStackContext(context: vscode.ExtensionContext, state: ReviewSta
       void vscode.commands.executeCommand('setContext', 'revu.onFeatureBranch', onFeatureBranch);
       void vscode.commands.executeCommand('setContext', 'revu.inGhStack', current?.inGhStack === true);
       void vscode.commands.executeCommand('setContext', 'revu.hasParentOverride', hasOverride);
+      void vscode.commands.executeCommand(
+        'setContext',
+        'revu.checkpointMode',
+        state.snapshot?.checkpointMode === true
+      );
     })
   );
 }
@@ -192,11 +196,15 @@ function registerReviewRefresh(
     await state.refresh({ external: branch !== lastBranch });
   };
   const refreshOnFocus = async (): Promise<void> => {
-    const branch = await branchNow().catch(() => undefined);
-    if (branch !== lastBranch) {
-      await state.refresh();
-    } else {
-      await state.refreshIfChanged();
+    try {
+      const branch = await branchNow();
+      if (branch !== lastBranch) {
+        await state.refresh();
+      } else {
+        await state.refreshIfChanged();
+      }
+    } catch (err) {
+      logWarning(`focus refresh failed: ${(err as Error).message}`);
     }
   };
   let saveTimer: NodeJS.Timeout | undefined;
