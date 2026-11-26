@@ -1,6 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { currentBranch, defaultBranch, git, isAncestor, isDetachedHead, resolveRef } from './git';
+import {
+  Worktrees,
+  checkedOutBranch,
+  defaultBranch,
+  git,
+  isAncestor,
+  listWorktrees,
+  resolveRef,
+} from './git';
 
 export interface PrSummary {
   number: number;
@@ -56,6 +64,7 @@ export interface Trunk {
 export interface StackResult {
   trunk: Trunk;
   branches: Map<string, BranchResolution>;
+  worktrees: Worktrees;
   current?: CurrentResolution;
 }
 
@@ -72,7 +81,7 @@ interface BranchGraph {
   creations: Map<string, Creation>;
   creationsOffTrunk: Set<string>;
   overrides: Map<string, string>;
-  checkedOut: Set<string>;
+  worktrees: Worktrees;
 }
 
 const OVERRIDE_KEY = /^branch\.(.+)\.revuparent$/;
@@ -161,15 +170,9 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
   } catch {
   }
 
-  const checkedOut = new Set<string>();
-  const worktreeOutput = await git(repoRoot, ['worktree', 'list', '--porcelain']);
-  for (const line of worktreeOutput.split('\n')) {
-    if (line.startsWith('branch refs/heads/')) {
-      checkedOut.add(line.slice('branch refs/heads/'.length));
-    }
-  }
+  const worktrees = await listWorktrees(repoRoot);
 
-  return { trunk, tips, remoteRefs, parents, creations, creationsOffTrunk, overrides, checkedOut };
+  return { trunk, tips, remoteRefs, parents, creations, creationsOffTrunk, overrides, worktrees };
 }
 
 function readCreation(reflogPath: string): Creation | undefined {
@@ -385,7 +388,7 @@ class Resolver {
 
   private preferred(branch: string): boolean {
     return (
-      this.graph.checkedOut.has(branch) ||
+      this.graph.worktrees.byBranch.has(branch) ||
       (this.external.ghStack?.branches.some((layer) => layer.name === branch) ?? false)
     );
   }
@@ -427,10 +430,10 @@ class Resolver {
 export async function resolveStack(repoRoot: string, external: StackExternal): Promise<StackResult> {
   const graph = await loadGraph(repoRoot, external);
   const branches = new Resolver(graph, external).resolveAll();
-  if (await isDetachedHead(repoRoot)) {
-    return { trunk: graph.trunk, branches };
+  const branch = await checkedOutBranch(repoRoot);
+  if (!branch) {
+    return { trunk: graph.trunk, branches, worktrees: graph.worktrees };
   }
-  const branch = await currentBranch(repoRoot);
   const resolution: BranchResolution = branches.get(branch) ?? {
     branch,
     parent: graph.trunk.name,
@@ -441,6 +444,7 @@ export async function resolveStack(repoRoot: string, external: StackExternal): P
   return {
     trunk: graph.trunk,
     branches,
+    worktrees: graph.worktrees,
     current: { ...resolution, diffBase, onTrunk: branch === graph.trunk.name },
   };
 }
@@ -461,4 +465,18 @@ async function diffBaseFor(repoRoot: string, resolution: BranchResolution): Prom
     return stackBase;
   }
   return mergeBase;
+}
+
+export async function setParentOverride(cwd: string, branch: string, parent: string): Promise<void> {
+  await git(cwd, ['config', `branch.${branch}.revuParent`, parent]);
+}
+
+export async function resetParentOverride(cwd: string, branch: string): Promise<void> {
+  try {
+    await git(cwd, ['config', '--unset', `branch.${branch}.revuParent`]);
+  } catch (err) {
+    if ((err as { code?: number }).code !== 5) {
+      throw err;
+    }
+  }
 }

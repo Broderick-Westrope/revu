@@ -1,36 +1,16 @@
-import { execFile } from 'child_process';
 import * as vscode from 'vscode';
-import {
-  hasTrackedChanges,
-  listWorktrees,
-  mergeParent,
-  planSwitch,
-  pullDefaultBranch,
-  PullResult,
-  resetParentOverride,
-  setParentOverride,
-  switchBranch,
-} from '../branchActions';
+import { mergeParent, planSwitch, pullDefaultBranch, PullResult } from '../branchActions';
+import { git, hasTrackedChanges, listWorktrees } from '../git';
 import { ReviewState } from '../reviewState';
+import { resetParentOverride, setParentOverride } from '../stack';
 import { StackNode } from '../stackTree';
+import { addWorktree } from '../wtp';
 
 export type Refresh = (options?: { external?: boolean }) => Promise<void>;
 
 function errorText(err: unknown): string {
   const stderr = (err as { stderr?: string }).stderr?.trim();
   return stderr || (err instanceof Error ? err.message : String(err));
-}
-
-function wtp(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('wtp', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        reject(Object.assign(err, { stderr }));
-      } else {
-        resolve(stdout);
-      }
-    });
-  });
 }
 
 function openFolder(folder: string, forceNewWindow: boolean): Thenable<unknown> {
@@ -44,10 +24,7 @@ async function createWorktree(root: string, branch: string): Promise<void> {
   try {
     folder = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Revu: creating a worktree for ${branch}` },
-      async () => {
-        await wtp(root, ['add', branch]);
-        return (await listWorktrees(root)).byBranch.get(branch);
-      }
+      () => addWorktree(root, branch)
     );
   } catch (err) {
     const text =
@@ -94,7 +71,7 @@ export async function switchToBranchCommand(
         await openFolder(plan.path, false);
         return;
       case 'switch':
-        await switchBranch(root, node.branch);
+        await git(root, ['switch', node.branch]);
         await refresh({ external: true });
         return;
       case 'refuseDirty':

@@ -3,19 +3,9 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-  SwitchInput,
-  aheadBehind,
-  hasTrackedChanges,
-  listWorktrees,
-  mergeParent,
-  planSwitch,
-  pullDefaultBranch,
-  resetParentOverride,
-  setParentOverride,
-  switchBranch,
-} from '../branchActions';
-import { resolveStack } from '../stack';
+import { SwitchInput, mergeParent, planSwitch, pullDefaultBranch } from '../branchActions';
+import { aheadBehind, hasTrackedChanges, listWorktrees } from '../git';
+import { resetParentOverride, resolveStack, setParentOverride } from '../stack';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -114,6 +104,18 @@ suite('branch actions', () => {
       ['main', repo],
       ['a', other],
     ]);
+  });
+
+  test('listWorktrees skips worktrees whose folder was deleted', async () => {
+    const repo = await localRepo();
+    await git(repo, ['branch', 'a']);
+    const other = path.join(tempDir('revu-actions-gone-'), 'a');
+    await git(repo, ['worktree', 'add', '-q', other, 'a']);
+    fs.rmSync(other, { recursive: true, force: true });
+
+    const worktrees = await listWorktrees(repo);
+
+    assert.strictEqual(worktrees.byBranch.has('a'), false);
   });
 
   test('hasTrackedChanges ignores untracked files and sees tracked edits', async () => {
@@ -378,14 +380,4 @@ suite('branch actions', () => {
     });
   });
 
-  test('switchBranch checks out the branch and keeps untracked files', async () => {
-    const repo = await localRepo();
-    await git(repo, ['branch', 'a']);
-    fs.writeFileSync(path.join(repo, 'scratch.txt'), 'scratch\n');
-
-    await switchBranch(repo, 'a');
-
-    assert.strictEqual((await git(repo, ['symbolic-ref', '--short', 'HEAD'])).trim(), 'a');
-    assert.ok(fs.existsSync(path.join(repo, 'scratch.txt')));
-  });
 });
