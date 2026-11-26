@@ -177,3 +177,22 @@ suite('changes tree provider', () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   });
 });
+
+suite('review state change check', () => {
+  test('refreshIfChanged skips when git state is unchanged and refreshes after a commit', async () => {
+    const repo = await makeStack();
+    await commitFile(repo, 'first.txt');
+    const state = new ReviewState(repo, async () => ({ prs: [] }));
+    await state.refresh();
+    let fired = 0;
+    state.onDidChange(() => fired++);
+
+    assert.strictEqual(await state.refreshIfChanged(), false);
+    await git(repo, ['config', 'branch.b.revuParent', 'main']);
+    assert.strictEqual(await state.refreshIfChanged(), true);
+    await commitFile(repo, 'second.txt');
+    assert.strictEqual(await state.refreshIfChanged(), true);
+    assert.strictEqual(fired, 2);
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+});

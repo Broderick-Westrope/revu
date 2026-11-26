@@ -192,6 +192,14 @@ function registerReviewRefresh(
     const branch = await branchNow().catch(() => undefined);
     await state.refresh({ external: branch !== lastBranch });
   };
+  const refreshOnFocus = async (): Promise<void> => {
+    const branch = await branchNow().catch(() => undefined);
+    if (branch !== lastBranch) {
+      await state.refresh();
+    } else {
+      await state.refreshIfChanged();
+    }
+  };
   let saveTimer: NodeJS.Timeout | undefined;
   context.subscriptions.push(
     state.onDidChange(() => {
@@ -205,7 +213,7 @@ function registerReviewRefresh(
     gitStateEvent(() => void refreshFromGit()),
     vscode.window.onDidChangeWindowState((windowState) => {
       if (windowState.focused) {
-        void refreshFromGit();
+        void refreshOnFocus();
       }
     }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
