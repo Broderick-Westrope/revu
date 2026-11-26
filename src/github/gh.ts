@@ -5,7 +5,7 @@ import { GhStackView, PrSummary, StackExternal } from '../stack';
 
 function gh(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('gh', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    execFile('gh', args, { cwd, maxBuffer: 64 * 1024 * 1024, timeout: 15000 }, (err, stdout) => {
       if (err) {
         reject(err);
       } else {
@@ -226,7 +226,7 @@ export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
     gh(cwd, ['stack', 'view', '--json'])
       .then(parseGhStackView)
       .catch((err: { code?: number; message?: string }) => {
-        if (err.code !== 2) {
+        if (err.code !== 2 && err.code !== 6) {
           logWarning(`gh stack view failed: ${err.message ?? String(err)}`);
         }
         return undefined;

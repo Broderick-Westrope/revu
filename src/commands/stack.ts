@@ -174,6 +174,16 @@ export async function mergeParentCommand(state: ReviewState, refresh: Refresh): 
     );
     return;
   }
+  if (current.ambiguous) {
+    const choice = await vscode.window.showWarningMessage(
+      `Revu: ${current.parent} is a guess at this branch's parent. Merge it into ${current.branch} anyway?`,
+      { modal: true },
+      'Merge'
+    );
+    if (choice !== 'Merge') {
+      return;
+    }
+  }
   try {
     const result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Revu: merging ${current.parentRef}` },
