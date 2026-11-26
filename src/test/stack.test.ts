@@ -226,6 +226,43 @@ suite('stack parent resolution', () => {
     assert.strictEqual(result.current?.source, 'gh-stack');
   });
 
+  test('gh stack layers carry membership and needsRebase even when an override wins', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    const aBase = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await commitFile(repo, 'a1.txt');
+    const bBase = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    await git(repo, ['config', 'branch.b.revuParent', 'main']);
+    const ghStack = {
+      trunk: 'main',
+      branches: [
+        { name: 'a', base: aBase, isMerged: false, needsRebase: false },
+        { name: 'b', base: bBase, isMerged: false, needsRebase: true },
+      ],
+    };
+
+    const result = await resolveStack(repo, { prs: [], ghStack });
+
+    assert.strictEqual(result.current?.source, 'override');
+    assert.strictEqual(result.current?.inGhStack, true);
+    assert.strictEqual(result.current?.needsRebase, true);
+    assert.strictEqual(result.branches.get('a')?.inGhStack, true);
+    assert.strictEqual(result.branches.get('a')?.needsRebase, false);
+  });
+
+  test('branches outside a gh stack are not marked as members', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.inGhStack, undefined);
+    assert.strictEqual(result.current?.needsRebase, undefined);
+  });
+
   test("an open PR's base names the parent", async () => {
     const repo = await localRepo();
     await git(repo, ['checkout', '-q', '-b', 'a']);

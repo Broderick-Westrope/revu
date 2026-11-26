@@ -38,6 +38,8 @@ export interface BranchResolution {
   warning?: string;
   pr?: PrSummary;
   stackBase?: string;
+  inGhStack?: boolean;
+  needsRebase?: boolean;
 }
 
 export interface CurrentResolution extends BranchResolution {
@@ -192,6 +194,12 @@ class Resolver {
     const cyclic = [...direct.keys()].filter((branch) => this.inCycle(branch, direct));
     for (const branch of cyclic) {
       direct.set(branch, { ...this.trunkResolution(branch), warning: 'parent cycle' });
+    }
+    for (const layer of this.external.ghStack?.branches ?? []) {
+      const resolution = direct.get(layer.name);
+      if (resolution) {
+        direct.set(layer.name, { ...resolution, inGhStack: true, needsRebase: layer.needsRebase });
+      }
     }
     return direct;
   }
