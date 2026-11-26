@@ -187,7 +187,7 @@ suite('stack tree provider', () => {
     const row = await item(provider, 'b');
 
     assert.strictEqual((row.iconPath as vscode.ThemeIcon).id, 'folder-opened');
-    assert.ok(/worktree/.test(row.contextValue ?? ''));
+    assert.ok(/;worktree\b/.test(row.contextValue ?? ''));
     assert.ok(String(row.tooltip).includes(other));
   });
 
@@ -200,7 +200,7 @@ suite('stack tree provider', () => {
 
     const row = await item(provider, 'a');
 
-    assert.ok(/pr/.test(row.contextValue ?? ''));
+    assert.ok(/;pr\b/.test(row.contextValue ?? ''));
     assert.ok(String(row.description).startsWith('#3 merged'));
   });
 });

@@ -454,4 +454,17 @@ suite('stack parent resolution', () => {
 
     assert.strictEqual(result.current?.diffBase, recorded);
   });
+  test('an empty creation reflog falls back to guessing from history', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    await git(repo, ['checkout', '-q', '-b', 'b']);
+    await commitFile(repo, 'b1.txt');
+    fs.writeFileSync(path.join(repo, '.git', 'logs', 'refs', 'heads', 'b'), '');
+
+    const result = await resolveStack(repo, noExternal);
+
+    assert.strictEqual(result.current?.parent, 'a');
+    assert.strictEqual(result.current?.ambiguous, true);
+  });
 });
