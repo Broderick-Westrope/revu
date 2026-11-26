@@ -54,10 +54,14 @@ interface Captured {
   description: string | undefined;
 }
 
-function makeProvider(repo: string): { provider: CheckpointTreeProvider; captured: Captured } {
+function makeProvider(
+  repo: string,
+  implicitBase?: string
+): { provider: CheckpointTreeProvider; captured: Captured } {
   const captured: Captured = { message: undefined, description: undefined };
   const provider = new CheckpointTreeProvider(
     repo,
+    () => implicitBase,
     (message) => {
       captured.message = message;
     },
@@ -94,6 +98,36 @@ suite('checkpoint tree provider', () => {
     );
     assert.strictEqual(captured.message, undefined);
     assert.strictEqual(captured.description, '2 commits');
+  });
+
+  test('the parent diff base bounds both commit lists', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'parent']);
+    const parentTip = await commitFile(repo, 'p.txt', 'parent\n');
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const c3 = await commitFile(repo, 'f2.txt', 'two\n');
+    await markSafe(repo, 'feature', c2);
+    const { provider } = makeProvider(repo, parentTip);
+    const commits = commitNodes(await provider.getChildren());
+    assert.deepStrictEqual(
+      commits.map((n) => n.commit.sha),
+      [c3, c2]
+    );
+  });
+
+  test('implicit state starts from the parent diff base', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-b', 'parent']);
+    const parentTip = await commitFile(repo, 'p.txt', 'parent\n');
+    await git(repo, ['checkout', '-b', 'feature']);
+    const c2 = await commitFile(repo, 'f1.txt', 'one\n');
+    const { provider } = makeProvider(repo, parentTip);
+    const commits = commitNodes(await provider.getChildren());
+    assert.deepStrictEqual(
+      commits.map((n) => n.commit.sha),
+      [c2]
+    );
   });
 
   test('commit nodes carry resolved 40-char parent SHAs', async () => {

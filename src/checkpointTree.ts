@@ -88,6 +88,7 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
 
   constructor(
     private readonly repoRoot: string,
+    private readonly implicitBase: () => string | undefined,
     private readonly setMessage?: (message: string | undefined) => void,
     private readonly setDescription?: (description: string | undefined) => void
   ) {}
@@ -228,7 +229,8 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
   }
 
   private async rootChildren(): Promise<CheckpointNode[]> {
-    const state = await getCheckpointState(this.repoRoot);
+    const implicitBase = this.implicitBase();
+    const state = await getCheckpointState(this.repoRoot, implicitBase);
     switch (state.kind) {
       case 'detached':
         this.update(MESSAGES.detached, undefined);
@@ -244,7 +246,7 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
         const [commits, summary, reviewed] = await Promise.all([
           unreviewedCommits(this.repoRoot, state.sha, state.branch),
           workingTreeSummary(this.repoRoot, state.sha),
-          reviewedCommits(this.repoRoot, state.sha),
+          reviewedCommits(this.repoRoot, state.sha, implicitBase),
         ]);
         this.update(
           undefined,
@@ -295,11 +297,13 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
 export function registerCheckpointTree(
   context: vscode.ExtensionContext,
   repoRootPath: string,
-  onGitStateChanged: vscode.Event<void>
+  onGitStateChanged: vscode.Event<void>,
+  implicitBase: () => string | undefined
 ): CheckpointTreeProvider {
   let treeView: vscode.TreeView<CheckpointNode> | undefined;
   const provider = new CheckpointTreeProvider(
     repoRootPath,
+    implicitBase,
     (message) => {
       if (treeView) {
         treeView.message = message;

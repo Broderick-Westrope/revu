@@ -62,7 +62,7 @@ suite('checkpoint diff URIs', () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     await commitFile(repo, 'f1.txt', 'one\n');
-    const provider = new CheckpointTreeProvider(repo);
+    const provider = new CheckpointTreeProvider(repo, () => undefined);
     const roots = await provider.getChildren();
     const commit = roots.find((n): n is CommitNode => n.kind === 'commit');
     assert.ok(commit);
