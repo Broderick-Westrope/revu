@@ -4,137 +4,155 @@
 
 **Problem:** Reviewing agent-written branches in Revu is noisy and manual in four ways.
 
-- Every base is computed from the local default branch (`defaultBranch` in `src/git.ts:43` returns `main`, never `origin/main`), and Revu never fetches. Agents only sometimes fast-forward the root worktree, so when a branch was cut from a newer `origin/main` than the local `main`, upstream commits leak into the branch diff.
-- A stacked branch is diffed against the default branch, so the layers below it show up in its diff. `fetchPrMetadata` (`src/github/gh.ts:35`) already fetches the PR's `baseRefName` but nothing uses it, and most stacks have no PR yet.
+- Every base is computed from the local default branch, and Revu never fetches. `defaultBranch` (`src/git.ts:43`) returns `main`, never `origin/main`, and it feeds the branch scope (`src/commands/startReview.ts:60`), the implicit checkpoint (`src/checkpoint.ts:50-54`), the reviewed-commit list (`src/checkpoint.ts:99-100`) and the Set Checkpoint picker (`src/commands/checkpoint.ts:147-148`). Agents only sometimes fast-forward the root worktree, so when a branch was cut from a newer `origin/main` than the local `main`, upstream commits leak into the diff.
+- A stacked branch is diffed against the default branch, so the layers below it show up in its diff. `fetchPrMetadata` (`src/github/gh.ts:35`) fetches the PR's `baseRefName` but nothing uses it, and most stacks have no PR yet.
 - Revu has no idea that stacks or other worktrees exist. Moving to another layer means finding its worktree by hand, opening it, and starting a review again through the scope picker.
 - Pulling the default branch or merging it into a feature branch means leaving the editor for a terminal.
 
-Session history shows how branches actually get made, since agents create them rather than Brodie: of about 840 `wtp add -b` calls, 620 branch from `main`, 142 branch from the current `HEAD` (often a feature worktree, so an unrecorded stack), and 73 name another feature branch as the base. `gh stack` appears in 26 sessions, and its stacks keep every layer in one worktree. wtp records no parent anywhere (its `state.json` holds only archive metadata), so most stacks are only discoverable from commit ancestry.
+Session history shows how branches actually get made, since agents create them rather than Brodie: of about 840 `wtp add -b` calls, 620 branch from `main`, 142 branch from the current `HEAD` (often a feature worktree, so an unrecorded stack), and 73 name another feature branch as the base. `gh stack` appears in 26 sessions, and its stacks keep every layer in one worktree. wtp records no parent anywhere (its `state.json` holds only archive metadata), so most stacks are only discoverable from commit history.
 
-**Goal:** Opening any branch in VS Code shows, with no commands run, its diff against its parent without upstream or lower-layer noise, where it sits in its stack, and each layer's PR if it has one. Pulling the default branch, merging the parent in, and jumping to another layer are one click each.
+**Goal:** Opening any branch in VS Code shows, with no commands run, its diff against its parent without upstream or lower-layer noise, where it sits in its stack, and each layer's PR if it has one. Pulling the default branch, merging the parent in, and jumping to another layer are one action each.
 
 **Scope:**
-- In: parent resolution with a per-branch override; trunk as `origin/<default>`; a Pull Default Branch action; a Merge Parent action; a Stack view with switching between layers; a Changes view with a checkpoint toggle; the checkpoint's implicit base becoming the parent merge-base; local comments and PR threads following the checked-out branch.
+- In: parent resolution with a per-branch override; trunk as `origin/<default>`; Pull Default Branch; Merge Parent; a Stack view with switching between layers; a Changes view with a checkpoint toggle; every base computation, including the checkpoint's implicit base, moving to the parent merge-base; local comments and PR threads following the checked-out branch.
 - Removed: guide generation, the guide tree, the guide panel, the guide cache, the `revu.agent*` settings, Start Review, End Review and the scope picker (including the working tree vs `HEAD` scope, which the built-in git extension covers), and the Checkpoint view's "All unreviewed changes" node, which the Changes view replaces.
-- Out: any GitHub write, `git push`, or `gh stack` mutation (the read-only guard is extended to cover them); rebasing (Merge Parent merges); creating stacks or PRs; branches that exist only on the remote (`wtp add --pr` covers that); a Stack view listing every worktree when on the default branch (worth adding if it's missed); merging a whole stack top to bottom in one action.
+- Out: any GitHub write, `git push`, or `gh stack` mutation; rebasing; creating stacks or PRs; branches that exist only on the remote (`wtp add --pr` covers that); siblings of the current branch in the Stack view; listing every worktree when on the default branch (worth adding if it's missed); merging a whole stack top to bottom in one action.
 
 **Constraints:**
 - Read-only toward GitHub stays a hard guarantee, enforced by `src/test/readonly.test.ts`.
-- `gh` and the `gh stack` extension stay optional; without them Revu falls back to inference and shows no PR state.
-- Worktrees are created only through `wtp`, never `git worktree add`, so they land where Brodie and his agents look for them and setup hooks run.
-- Revu never discards or stashes uncommitted work. Any action that would touch a dirty worktree refuses and says why.
+- `gh` and the `gh stack` extension stay optional. Any failure from either, including a missing extension or exit 2 ("not in a stack"), means that source doesn't apply; anything other than exit 2 is logged.
+- Worktrees are created only through `wtp`, never `git worktree add`, so they land where Brodie and his agents look for them and setup hooks run. `wtp add <existing-branch>` attaches an existing branch (per `wtp add --help`).
+- Revu never discards or stashes uncommitted work. "Dirty" means tracked changes only (`git status --porcelain --untracked-files=no`), since `git switch` and `git merge` carry untracked files safely and agents leave scratch files around.
 - Git state stays the source of truth: the parent override is git config and the checkpoint stays a ref, so terminal git and agents can read and change both.
 
 **Design:**
 
 ```mermaid
 flowchart TD
-  Watcher["git watcher: commits, checkouts, ref moves"] --> Resolve
-  Resolve["resolve parent for checked-out branch"] --> Stack["Stack view"]
+  Events["HEAD watcher, window focus, Revu actions, Refresh"] --> Resolve
+  Resolve["resolve parent and diff base for checked-out branch"] --> Stack["Stack view"]
   Resolve --> Changes["Changes view"]
   CP["checkpoint ref"] --> Changes
   Changes -->|open file| Diff["native diff: base vs live file, local comments, PR threads"]
-  Stack -->|select layer| Switch["switch branch or open its worktree"]
-  Switch --> Watcher
+  Stack -->|Switch action| Switch["git switch, open worktree, or wtp add"]
+  Switch --> Events
 ```
 
-*Trunk.* The trunk ref is `origin/<default>` whenever that remote ref exists, falling back to the local default branch without an `origin` remote. The default branch name comes from `origin/HEAD` as today. Nothing else uses the local default branch, which is what removes upstream noise whether or not the root worktree was pulled.
+*Trunk.* The trunk ref is `origin/<trunk>` whenever that remote ref exists, falling back to the local branch without an `origin` remote. The trunk name is the default branch from `origin/HEAD`, or the gh stack's `trunk` when the branch is in one (so a stack on a release branch works). One function computes every diff base; the local-default-branch paths listed under Problem are deleted.
 
-*Parent resolution,* first match wins:
+*Parent resolution,* first match wins. Each source yields a parent ref and a diff base, and the diff base is what the Changes view and the implicit checkpoint use:
 
-| Order | Source | Parent ref |
-|---|---|---|
-| 1 | Override in `branch.<name>.revuParent` | the named branch |
-| 2 | `gh stack view --json`, when the branch is in a gh stack | the branch listed before it, or trunk for the bottom layer |
-| 3 | The branch's open PR, by `baseRefName` | that branch, or trunk when it names the default branch |
-| 4 | Inference: the nearest local branch whose tip the branch contains, skipping the default branch and branches whose PR is merged or whose tip trunk already contains | that branch |
-| 5 | Trunk | `origin/<default>` |
+| Order | Source | Parent | Diff base |
+|---|---|---|---|
+| 1 | Override in `branch.<name>.revuParent`, when that branch still exists | the named branch | merge-base with it |
+| 2 | `gh stack view --json`, current branch only | the nearest layer below it with `isMerged` false, else trunk | the branch's recorded `base` SHA when it's an ancestor of `HEAD`, else the merge-base |
+| 3 | The branch's PR, when its state is `OPEN` | `baseRefName`: trunk when it names the trunk, else the local branch, else `origin/<base>`, else skip this rule | merge-base |
+| 4 | Inference (below) | the chosen branch | merge-base |
+| 5 | Trunk | `origin/<trunk>` | merge-base |
 
-A parent that is another local branch is compared at its local ref, since stack layers often have unpushed commits. Every diff starts at the merge-base of the branch and its parent ref, never the parent's tip, so commits the parent gained after branching never appear. The Changes view title shows the parent and where it came from (for example `vs feat/port (inferred)`). "Compare With…" in the Changes view title picks a local branch and writes the override; "Reset Parent" deletes it.
+The gh stack base SHA matters when a lower layer was amended but not restacked: the merge-base with the amended branch would sit below the old commits and leak them in. An override whose branch was deleted falls through to rule 2, and the Changes view says "override target missing" next to Reset Parent.
 
-*Stack view.* A tree rooted at trunk showing the current branch's family: its chain of parents down to trunk, and every local branch whose resolved parent chain passes through the bottom layer. With wtp inference two branches can share a parent, so the tree can fork. Each row shows the branch name and, as its description, the PR number and state (or "no PR"), commits ahead of its parent, commits behind it, and whether it lives in another worktree. The current branch is highlighted.
+*Inference* chooses by fork point, not by containment, so it survives new commits on the parent, which is the normal state of a stack. Let `T` be the merge-base of branch `b` with trunk. A candidate is any other local branch `c` (not the trunk, not with a merged PR, not containing `b`'s tip) where `merge-base(b, c)` is a strict descendant of `T`. The parent is the candidate with the fewest commits between `merge-base(b, c)` and `b`. Ties go to a candidate in a worktree or gh stack, then alphabetical order, and the Changes view title says `(inferred, ambiguous)` so Compare With… is one click away. A branch with no commits of its own (just created from `a`) has `b`'s tip equal to `a`'s, so `a` contains it and nothing is inferred until its first commit; until then it shows as trunk-based with an empty diff, which is correct. Every walk up a parent chain keeps a visited set; a cycle (possible through overrides) stops the walk, uses trunk, and shows a warning.
 
-- Selecting a row in the current worktree (gh-stack layers) runs `git switch` when the worktree is clean. When it's dirty, Revu refuses and offers "Create Worktree", which runs `wtp add <branch>` and opens the result.
-- Selecting a row checked out in another worktree opens that folder in the current window. An inline "Open in New Window" action covers the rare case of wanting both.
-- A branch with no worktree, in a dirty current worktree, gets the same "Create Worktree" offer.
-- An inline action on a row with a PR opens the PR URL in the browser.
+Compare With… in the Changes view title picks a local branch and writes the override; Reset Parent deletes it. The Changes view title shows the parent and its source, e.g. `vs feat/port (inferred)` or `vs main (PR)`.
+
+*Stack view.* A tree rooted at trunk: the current branch's chain of parents down to trunk, then the current branch's descendants (local branches whose resolved parent chain reaches it). Siblings are left out. Each row shows the branch name and, as its description, the PR number and state (or "no PR"), commits ahead of and behind its parent, "needs rebase" when gh stack reports it, and an icon when it's checked out in another worktree. The current branch is highlighted.
+
+Selecting a row does nothing beyond selection, because switching can reload the window and a stray click shouldn't do that. The actions are inline:
+
+- **Switch** on a branch with no worktree, or the current worktree's other gh-stack layers: `git switch` when the worktree is clean. When it's dirty, it refuses and offers Create Worktree, which runs `wtp add <branch>` and opens the result in this window.
+- **Switch** on a branch checked out in another worktree opens that folder in the current window. **Open in New Window** covers the rare case of wanting both.
+- The trunk row's Switch opens the root worktree.
+- **Open PR** opens the PR URL in the browser.
 - Title actions: Pull Default Branch, Merge Parent, Refresh.
 
-*Pull Default Branch* fetches `origin`, then fast-forwards the root worktree when it's on the default branch and clean. When it can't (dirty, on another branch, diverged), it tells you why the root stayed behind and carries on; trunk is `origin/<default>` either way, so the diff is still correct.
+*Pull Default Branch* fetches `origin`, then fast-forwards the root worktree when it's on the default branch and clean. When it can't (dirty, on another branch, diverged), it says why the root stayed behind; trunk is `origin/<default>` either way, so the diff is already correct.
 
-*Merge Parent* fetches first when the parent is trunk, then runs `git merge --no-edit <parent ref>` in the current worktree. It refuses when the worktree is dirty. On a conflict it leaves the merge in progress and opens the Source Control view, so resolution happens in VS Code's merge editor; Revu doesn't abort or continue on your behalf.
+*Merge Parent* fetches first when the parent is trunk, then runs `git merge --no-edit <parent ref>`. It refuses when the worktree is dirty. On a conflict it leaves the merge in progress and opens the Source Control view, so resolution happens in VS Code's merge editor; Revu doesn't abort or continue on your behalf. When the parent came from gh stack, Merge Parent is hidden and the row's "needs rebase" points at `gh stack rebase --upstack`, since a later restack would flatten Revu's merge commit anyway. After a merge without conflicts, if the checkpoint was at the pre-merge `HEAD`, Revu moves it to the merge commit, so the parent's changes don't reappear as unreviewed.
 
-*Changes view.* Files changed between the merge-base with the parent and the working tree, including uncommitted and untracked files, laid out as a folder tree. Clicking a file opens the native diff with the live file on the right so local comments work, as the Checkpoint view's working-tree diffs do today. A title-bar toggle switches to checkpoint mode: the base becomes the branch's checkpoint ref, so only files changed since the last reviewed commit are listed. The view title states which mode is on. The toggle is per window and not persisted.
+*Changes view.* Files changed between the diff base and the working tree, including uncommitted and untracked files, as a folder tree. Files with unresolved conflicts show with a conflict marker rather than disappearing (today `parseNameStatus` drops `U` entries, `src/git.ts:73`). Clicking a file opens the native diff with the live file on the right so local comments work, as the Checkpoint view's working-tree diffs do today. A title-bar toggle switches to checkpoint mode: the base becomes the checkpoint ref, so only files changed since the last reviewed commit are listed. The toggle is per window, not persisted, and disabled with the Checkpoint view's existing message when the checkpoint is orphaned. On the default branch itself, the view says "on trunk" and diffs against `origin/<default>`, which shows unpushed commits and working-tree changes. With a detached `HEAD` (including mid-rebase), both views show a detached message and nothing else.
 
-*Checkpoints.* The implicit checkpoint (no ref yet) becomes the merge-base with the resolved parent instead of the default branch, so checkpoint mode with no explicit checkpoint shows the same files as the default mode. The Checkpoint view keeps its commit lists, Mark Safe, Move Checkpoint Here, Set and Remove Checkpoint, and commit diffs; only its "All unreviewed changes" node goes. The orphaned and detached states keep their current handling.
+*Checkpoints.* The implicit checkpoint becomes the diff base above, so checkpoint mode with no explicit checkpoint lists the same files as the default mode, and the reviewed-commit list and Set Checkpoint picker start from the same base. Merge commits in the Checkpoint view open with `--remerge-diff` (only what the merge changed beyond a clean merge) rather than against their first parent, which would expand into the whole parent diff. Everything else in the Checkpoint view stays.
 
-*Review state follows the branch.* The Changes view's current base replaces the active scope. Local comments are stored per branch, and Copy All Comments and Clear All Comments act on the current branch's set. PR threads refresh for the checked-out branch's own PR on every branch change, so a lower layer's threads never render on a higher one. Comments saved before this change attach to whichever branch is checked out the first time the new version runs.
+*Review state follows the branch.* The Changes view's current base replaces the active scope. Comments already live in `workspaceState`, which is per folder, so separate worktrees are already isolated; switching branches in place (gh stack layers) is what needs per-branch keys. Comments are stored per branch name, and the existing list migrates once to whichever branch is checked out. On a branch change, Revu disposes the rendered comment threads and restores that branch's set, and Copy All Comments and Clear All Comments act on it. With a detached `HEAD`, comments are hidden and new ones refused. PR threads refresh for the checked-out branch's own PR on each branch change, so a lower layer's threads never render on a higher one; threads stay anchored to their recorded lines as today.
 
-*Refresh.* The existing git watcher drives everything. Revu never fetches on its own; ahead and behind counts are relative to the last fetch, and Pull Default Branch and Merge Parent fetch. PR state comes from `gh` and is cached between refreshes.
+*Refresh.* The existing watcher only sees this worktree's `HEAD` reflog (`src/gitWatcher.ts:43-46`), which covers commits, checkouts and resets here. Changes it can't see (commits to the parent from another worktree, fetches, checkpoint moves from the terminal, override edits) are picked up when the VS Code window regains focus, which is when Brodie comes back from the terminal. Every Revu action refreshes when it finishes. All of that is local git. PR data comes from one `gh pr list --state all` call per branch change and per explicit Refresh, cached in memory; `gh stack view --json` runs only for the current branch, at the same times. Revu never fetches from `origin` except in Pull Default Branch and Merge Parent, so ahead and behind counts are relative to the last fetch.
 
 **Decisions:**
 
 ### Does the local default branch take any part in diffs?
 
-**No; trunk is `origin/<default>`.** Comparing against the remote ref removes upstream noise without depending on anyone having pulled the root worktree, which is the root cause of the noise. Declined: comparing against local `main` and requiring a pull first, because agents don't pull reliably and the diff would silently be wrong until someone did.
+**No; trunk is `origin/<default>`.** Comparing against the remote ref removes upstream noise without depending on anyone having pulled the root worktree, which is the cause of the noise. Declined: comparing against local `main` and requiring a pull first, because agents don't pull reliably and the diff would silently be wrong until someone did. Pull Default Branch still fast-forwards the root worktree because Brodie reads the latest code there.
 
-### Does an explicit override beat gh-stack and the PR base?
+### Does an explicit override beat gh stack and the PR base?
 
-**Yes, override first.** We discussed gh-stack, then PR, then override, but in that order "Compare With…" would do nothing on any branch with a PR or a gh stack, which is exactly when you'd reach for it. An override is a deliberate act and Reset Parent undoes it.
+**Yes, override first.** In the order we first discussed (gh stack, then PR, then override), Compare With… would do nothing on any branch with a PR or a gh stack, which is exactly when you'd reach for it. An override is a deliberate act and Reset Parent undoes it.
 
 ### How is the parent found for stacks nothing recorded?
 
-**Infer it from ancestry on every refresh, and let Compare With… persist a correction.** Most stacks come from `wtp add -b X <branch>` or `wtp add -b X` from a feature worktree, and neither records the base. Declined: asking for the parent when a branch is created, because agents create the branches and wouldn't answer; recording the inferred parent automatically, because a wrong guess would then outlive the branch that caused it.
+**Infer it from fork points on every refresh, and let Compare With… persist a correction.** Containment ("the branch contains the candidate's tip") breaks as soon as the lower layer gets a fix commit, which happens constantly, and would fall back to trunk and flood the diff with the lower layer. Declined: asking for the parent when a branch is created, because agents create the branches; recording the inferred parent automatically, because a wrong guess would then outlive the branch that caused it.
 
 ### Merge or rebase to bring the parent in?
 
-**Merge.** It rewrites no history, so checkpoint refs and the review state of already-reviewed commits stay valid, and a conflict can be resolved in VS Code's merge editor. Rebasing would orphan every checkpoint on the branch. For gh-stack stacks, `gh stack rebase --upstack` from the terminal stays the tool for restacking.
+**Merge.** It rewrites no history, so checkpoint refs stay valid, and conflicts resolve in VS Code's merge editor. Moving a checkpoint that sat at the pre-merge `HEAD` and opening merge commits with `--remerge-diff` keep the merged-in parent changes out of checkpoint mode. gh-stack layers are the exception, where `gh stack rebase --upstack` from the terminal stays the tool.
 
-### What does selecting a branch with no worktree do?
+### What does Switch do for a branch with no worktree?
 
-**Switch in place when the worktree is clean, otherwise offer to create a worktree.** gh stack already keeps all layers in one worktree, so switching in place matches how those stacks are built. A dirty worktree is usually an agent's work in progress, which a switch would carry along or block on.
+**`git switch` in place when the worktree is clean, otherwise offer to create a worktree.** gh stack already keeps all layers in one worktree, so switching in place matches how those stacks are built. A dirty worktree is usually an agent's work in progress.
 
 ### Where does a switch to another worktree open?
 
-**In the current window, replacing its folder, with an inline action to open a new window instead.** One window per review keeps the Revu views about one branch.
+**In the current window, replacing its folder, with Open in New Window as an alternative.** One window per review keeps the Revu views about one branch.
 
 ### Why remove the guide and the scope picker?
 
-**Brodie doesn't use the guide, and the Changes view makes the scope implicit.** The guide accounts for most of the code that knows about scopes (`src/guide/`, its cache, staleness tracking and agent settings), so removing it is what makes "the review is the branch" simple. The working tree vs `HEAD` scope goes with the picker; the built-in git extension shows uncommitted changes.
+**Brodie doesn't use the guide, and the Changes view makes the scope implicit.** The guide accounts for most of the code that knows about scopes (`src/guide/`, its cache, staleness tracking and agent settings), so removing it is what makes "the review is the branch" simple.
 
 ### Does Revu now write to git?
 
-**Yes, locally: `fetch`, a fast-forward of the root worktree, `merge`, `switch`, the parent override, and `wtp add`.** These were the manual steps Brodie wanted removed. GitHub stays read-only, and the guard test gains patterns for `git push` and the `gh stack` subcommands that write (`push`, `submit`, `sync`, `merge`, `rebase`, `link`), so a write path to the remote can't slip in through stacks.
+**Yes, locally: `fetch`, a fast-forward of the root worktree, `merge`, `switch`, the checkpoint move after a merge, the parent override, and `wtp add`.** These are the manual steps Brodie wanted gone. GitHub stays read-only, and the guard test gains patterns for `git push` and the writing `gh stack` subcommands (`push`, `submit`, `sync`, `merge`, `rebase`, `link`). The patterns are anchored to the `stack` token so Revu's own `git merge` doesn't trip them.
+
+### Declined review suggestions
+
+- Fetch-only Pull Default Branch, dropping the root fast-forward: Brodie chose the fast-forward with a fallback.
+- Behind counts on the current row only: they're cheap local counts, and a stale count still says roughly how far a layer has drifted.
+- Watching the common git dir's refs and config: refreshing on window focus covers the same changes with no new watcher code. If the views are seen to go stale while the window has focus (an agent running in the integrated terminal), add the watchers then.
 
 **Risks and Tradeoffs:**
-- Inference can pick the wrong parent, most likely when a squash-merged branch is still around locally or two candidates sit on the same commit. The view always names the parent and its source, and Compare With… fixes it. If overrides turn out to be needed on most stacked branches, inference is the wrong default and the design should record parents at creation time instead.
-- Computing the family means inspecting every local branch on each refresh. That's cheap at Brodie's scale; if the Stack view lags after commits in a repo with hundreds of local branches, limit candidates to branches in a worktree or a gh stack.
+- Inference can still choose wrongly, most likely when a branch with a squash-merged PR is still around locally but its PR state isn't in the cached list. The view always names the parent and its source, and Compare With… fixes it. If overrides turn out to be needed on most stacked branches, inference is the wrong default and parents should be recorded at creation time instead.
+- Inference inspects every local branch on each refresh. That's cheap local git at Brodie's scale; if the Stack view lags in a repo with hundreds of local branches, limit candidates to branches in a worktree or a gh stack.
+- `gh pr list --state all` returns the most recent PRs only, so very old branches may show "no PR" wrongly.
 - Ahead and behind counts go stale between fetches. Accepted to avoid background network calls.
-- Replacing the window's folder reloads the extension host and drops open editors. Accepted because it's what Brodie asked for, with Open in New Window as the escape.
+- Replacing the window's folder reloads the extension host and drops open editors. Accepted because Brodie asked for it, with Open in New Window as the escape.
 - Removing the guide deletes a working feature. If guides are missed, they come back as an action on the Changes view rather than a scope.
 
 **Success Criteria:**
 - [ ] On a branch cut from a newer `origin/main` than the local `main`, the Changes view lists only the branch's own files.
 - [ ] Pull Default Branch fast-forwards a clean root worktree; with a dirty root it reports why it didn't and the Changes view is still correct.
-- [ ] For `wtp add -b b --stay a` where `a` is a feature branch, opening `b` shows `vs a (inferred)` and only `b`'s changes.
-- [ ] For a gh stack `main <- a <- b`, the parent of `b` is `a` (gh-stack), and the Stack view shows `main`, `a`, `b` in order with PR state where PRs exist.
-- [ ] Compare With… on a branch writes `branch.<name>.revuParent`, the Changes view switches to that parent, and Reset Parent restores the resolved one.
-- [ ] Merge Parent with commits on the parent merges them; with a conflict it stops with the merge in progress and opens Source Control; with uncommitted changes it refuses and changes nothing.
-- [ ] Selecting a layer checked out in another worktree opens that folder in the current window; Open in New Window keeps the current one.
-- [ ] Selecting a layer with no worktree from a clean worktree switches to it; from a dirty worktree it offers Create Worktree and never switches.
+- [ ] After `wtp add -b b --stay a` (`a` a feature branch) and a commit on `b`, `b` shows `vs a (inferred)` and only `b`'s changes, and still does after a further commit on `a`.
+- [ ] Two overrides pointing at each other show a cycle warning and fall back to trunk without hanging.
+- [ ] For a gh stack `main <- a <- b`, the parent of `b` is `a` (gh stack); once `a` is merged, `b`'s parent is trunk; the Stack view shows `main`, `a`, `b` in order with PR state where PRs exist.
+- [ ] Compare With… writes `branch.<name>.revuParent` and the Changes view switches to that parent; Reset Parent restores the resolved one; deleting the override's branch shows "override target missing".
+- [ ] Merge Parent with new parent commits merges them; with a conflict it stops with the merge in progress, opens Source Control, and the conflicted files show in the Changes view; with tracked uncommitted changes it refuses and changes nothing; on a gh-stack layer it isn't offered.
+- [ ] After Merge Parent with the checkpoint at the pre-merge `HEAD`, checkpoint mode lists no files from the parent.
+- [ ] Switch on a layer checked out in another worktree opens that folder in the current window; Open in New Window keeps the current one; clicking a row alone never switches.
+- [ ] Switch on a layer with no worktree from a clean worktree (untracked files allowed) switches to it; from a worktree with tracked changes it offers Create Worktree and never switches.
+- [ ] A commit made on the parent from another worktree shows in the Stack view's behind count after the window regains focus.
 - [ ] Toggling checkpoint mode after marking a commit safe lists only files changed after it; with no checkpoint both modes list the same files.
-- [ ] Comments left on branch `a` aren't shown or exported on branch `b`, and reappear after switching back.
+- [ ] Comments left on branch `a` aren't shown or exported after switching in place to `b`, and reappear after switching back.
 - [ ] Switching branches re-renders PR threads for the new branch's PR, or clears them when it has none.
-- [ ] No guide, Start Review or End Review command remains, and the read-only guard test fails if `git push` or a writing `gh stack` subcommand appears in `src`.
+- [ ] No guide, Start Review or End Review command remains, and the read-only guard test fails if `git push` or a writing `gh stack` subcommand appears in `src` but passes with Revu's own `git merge`.
 
 **Context Files:**
-- `src/git.ts`: `defaultBranch` and `mergeBase`, where the local default branch is used today.
-- `src/checkpoint.ts`: `getCheckpointState`, whose implicit base becomes the parent merge-base.
-- `src/checkpointTree.ts`: the Checkpoint view; its working-tree node moves to the Changes view and its file rows show how diffs open today.
-- `src/commands/checkpointDiff.ts`: working-tree and commit diff opening to reuse.
+- `src/git.ts`: `defaultBranch`, `mergeBase`, `parseNameStatus` and `hasUncommittedChanges`, all of which change.
+- `src/checkpoint.ts`: `getCheckpointState` and `reviewedCommits`, whose bases move to the parent diff base.
+- `src/commands/checkpoint.ts`: the Set Checkpoint picker's merge-base option.
+- `src/checkpointTree.ts`: the Checkpoint view; its working-tree node moves to the Changes view, and its file rows show how diffs open today.
+- `src/commands/checkpointDiff.ts`: working-tree and commit diff opening to reuse; merge commits switch to `--remerge-diff`.
 - `src/scope.ts`, `src/commands/startReview.ts`, `src/commands/activateScope.ts`, `src/checkpointGuard.ts`: scope plumbing to replace with the Changes view's base.
-- `src/github/gh.ts`: PR metadata and threads; gains the batched PR state lookup and `gh stack view --json`.
-- `src/comments/store.ts`: the single global comment list to key by branch.
+- `src/gitWatcher.ts`: the `HEAD`-only watcher, joined by the window-focus refresh.
+- `src/github/gh.ts`: PR metadata and threads; gains `state`, the batched `gh pr list`, and `gh stack view --json`.
+- `src/comments/store.ts`, `src/comments/controller.ts`: per-folder storage to key by branch, and thread restore that runs once today and needs teardown on branch change.
 - `src/guide/`, `src/commands/generateGuide.ts`: removed.
 - `src/test/readonly.test.ts`: the guard to extend.
 - `plans/design-2026-07-18-review-extension.md`: declined worktree handling ("checked-out code only"); this doc reverses that.
