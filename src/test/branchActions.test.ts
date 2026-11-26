@@ -3,7 +3,14 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { SwitchInput, aheadBehind, hasTrackedChanges, listWorktrees, planSwitch } from '../branchActions';
+import {
+  SwitchInput,
+  aheadBehind,
+  hasTrackedChanges,
+  listWorktrees,
+  planSwitch,
+  pullDefaultBranch,
+} from '../branchActions';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -44,6 +51,42 @@ async function localRepo(): Promise<string> {
   await configure(repo);
   await commitFile(repo, 'base.txt');
   return repo;
+}
+
+interface Remote {
+  seed: string;
+  repo: string;
+}
+
+async function cloneWithOrigin(): Promise<Remote> {
+  const origin = tempDir('revu-actions-origin-');
+  await git(origin, ['init', '--bare', '-b', 'main']);
+  const seed = tempDir('revu-actions-seed-');
+  await git(seed, ['init', '-b', 'main']);
+  await configure(seed);
+  await commitFile(seed, 'base.txt');
+  await git(seed, ['remote', 'add', 'origin', origin]);
+  await git(seed, ['push', '-q', 'origin', 'main']);
+  const repo = tempDir('revu-actions-repo-');
+  await git(repo, ['clone', '-q', origin, '.']);
+  await configure(repo);
+  return { seed, repo };
+}
+
+async function upstreamCommit(remote: Remote, name: string): Promise<string> {
+  const sha = await commitFile(remote.seed, name);
+  await git(remote.seed, ['push', '-q', 'origin', 'main']);
+  return sha;
+}
+
+async function linkedWorktree(repo: string, branch: string): Promise<string> {
+  const dir = path.join(tempDir('revu-actions-wt-'), branch);
+  await git(repo, ['worktree', 'add', '-q', '-b', branch, dir]);
+  return dir;
+}
+
+async function rev(repo: string, ref: string): Promise<string> {
+  return (await git(repo, ['rev-parse', ref])).trim();
 }
 
 suite('branch actions', () => {
@@ -131,6 +174,59 @@ suite('branch actions', () => {
 
     test('a branch with no worktree offers a worktree when dirty', () => {
       assert.deepStrictEqual(planSwitch({ ...base, dirty: true }), { kind: 'offerWorktree' });
+    });
+  });
+
+  suite('pullDefaultBranch', () => {
+    test('fast-forwards a clean main worktree on the trunk', async () => {
+      const remote = await cloneWithOrigin();
+      const feature = await linkedWorktree(remote.repo, 'a');
+      const upstream = await upstreamCommit(remote, 'up.txt');
+
+      const result = await pullDefaultBranch(feature, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'fastForwarded' });
+      assert.strictEqual(await rev(remote.repo, 'main'), upstream);
+    });
+
+    test('reports up to date when nothing new was fetched', async () => {
+      const remote = await cloneWithOrigin();
+
+      assert.deepStrictEqual(await pullDefaultBranch(remote.repo, 'main'), { kind: 'upToDate' });
+    });
+
+    test('leaves a dirty main worktree behind but still fetches', async () => {
+      const remote = await cloneWithOrigin();
+      const before = await rev(remote.repo, 'main');
+      fs.writeFileSync(path.join(remote.repo, 'base.txt'), 'edited\n');
+      const upstream = await upstreamCommit(remote, 'up.txt');
+
+      const result = await pullDefaultBranch(remote.repo, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'stayedBehind', reason: 'dirty' });
+      assert.strictEqual(await rev(remote.repo, 'main'), before);
+      assert.strictEqual(await rev(remote.repo, 'origin/main'), upstream);
+    });
+
+    test('leaves the main worktree alone when it is on another branch', async () => {
+      const remote = await cloneWithOrigin();
+      await git(remote.repo, ['checkout', '-q', '-b', 'side']);
+      await upstreamCommit(remote, 'up.txt');
+
+      const result = await pullDefaultBranch(remote.repo, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'stayedBehind', reason: 'notOnTrunk', branch: 'side' });
+    });
+
+    test('reports a diverged local trunk', async () => {
+      const remote = await cloneWithOrigin();
+      await configure(remote.repo);
+      await commitFile(remote.repo, 'local.txt');
+      await upstreamCommit(remote, 'up.txt');
+
+      const result = await pullDefaultBranch(remote.repo, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'stayedBehind', reason: 'diverged' });
     });
   });
 });

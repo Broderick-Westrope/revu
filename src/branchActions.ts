@@ -1,4 +1,4 @@
-import { git } from './git';
+import { git, isAncestor, resolveRef } from './git';
 
 export interface Worktrees {
   main: string;
@@ -73,4 +73,33 @@ export function planSwitch(input: SwitchInput): SwitchPlan {
     return { kind: 'openFolder', path: elsewhere };
   }
   return input.dirty ? { kind: 'offerWorktree' } : { kind: 'switch' };
+}
+
+export type PullResult =
+  | { kind: 'fastForwarded' }
+  | { kind: 'upToDate' }
+  | { kind: 'stayedBehind'; reason: 'dirty' | 'diverged' }
+  | { kind: 'stayedBehind'; reason: 'notOnTrunk'; branch?: string };
+
+export async function pullDefaultBranch(cwd: string, trunk: string): Promise<PullResult> {
+  await git(cwd, ['fetch', 'origin']);
+  const upstream = `origin/${trunk}`;
+  const local = await resolveRef(cwd, `refs/heads/${trunk}`);
+  if (local && (await isAncestor(cwd, upstream, local))) {
+    return { kind: 'upToDate' };
+  }
+  const worktrees = await listWorktrees(cwd);
+  if (worktrees.byBranch.get(trunk) !== worktrees.main) {
+    const branch = [...worktrees.byBranch].find(([, dir]) => dir === worktrees.main)?.[0];
+    return { kind: 'stayedBehind', reason: 'notOnTrunk', branch };
+  }
+  if (await hasTrackedChanges(worktrees.main)) {
+    return { kind: 'stayedBehind', reason: 'dirty' };
+  }
+  try {
+    await git(worktrees.main, ['merge', '--ff-only', upstream]);
+  } catch {
+    return { kind: 'stayedBehind', reason: 'diverged' };
+  }
+  return { kind: 'fastForwarded' };
 }
