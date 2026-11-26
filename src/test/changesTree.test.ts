@@ -213,6 +213,7 @@ suite('review state errors', () => {
     const { provider, state, captured } = await setup(repo);
 
     assert.ok(state.error);
+    assert.strictEqual(state.branch, 'b');
     assert.deepStrictEqual(await provider.getChildren(), []);
     assert.ok(captured.message?.startsWith('Revu could not read this branch:'));
   });

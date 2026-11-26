@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getCheckpointState } from './checkpoint';
-import { ChangedFile, changedFiles, git } from './git';
+import { ChangedFile, changedFiles, checkedOutBranch, git } from './git';
 import { StackExternal, StackResult, resolveStack } from './stack';
 
 export interface ReviewSnapshot {
@@ -20,6 +20,7 @@ export class ReviewState {
   private lastFingerprint: string | undefined;
   private lastError: string | undefined;
   private generation = 0;
+  private lastBranch: string | undefined;
   private externalFetch: Promise<StackExternal> | undefined;
 
   readonly onDidChange: vscode.Event<void> = this.emitter.event;
@@ -56,7 +57,9 @@ export class ReviewState {
     let next: ReviewSnapshot | undefined;
     let error: string | undefined;
     let fingerprint: string | undefined;
+    let branch: string | undefined;
     try {
+      branch = await checkedOutBranch(this.repoRoot);
       fingerprint = await this.fingerprint();
       const stack = await resolveStack(this.repoRoot, this.external);
       next = { stack, checkpointMode: this.checkpointMode, ...(await this.base(stack)) };
@@ -67,9 +70,14 @@ export class ReviewState {
       return;
     }
     this.lastFingerprint = fingerprint;
+    this.lastBranch = branch;
     this.current = next;
     this.lastError = error;
     this.emitter.fire();
+  }
+
+  get branch(): string | undefined {
+    return this.lastBranch;
   }
 
   get error(): string | undefined {

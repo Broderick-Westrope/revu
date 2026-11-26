@@ -202,7 +202,7 @@ function registerReviewRefresh(
   let saveTimer: NodeJS.Timeout | undefined;
   context.subscriptions.push(
     state.onDidChange(() => {
-      const branch = state.snapshot?.stack.current?.branch;
+      const branch = state.branch;
       if (branch !== lastBranch) {
         lastBranch = branch;
         void store.setBranch(branch);
