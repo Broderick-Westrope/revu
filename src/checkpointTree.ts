@@ -289,7 +289,7 @@ export class CheckpointTreeProvider implements vscode.TreeDataProvider<Checkpoin
 export function registerCheckpointTree(
   context: vscode.ExtensionContext,
   repoRootPath: string,
-  onGitStateChanged: vscode.Event<void>,
+  onReviewChanged: vscode.Event<void>,
   implicitBase: () => string | undefined
 ): CheckpointTreeProvider {
   let treeView: vscode.TreeView<CheckpointNode> | undefined;
@@ -311,35 +311,7 @@ export function registerCheckpointTree(
     treeDataProvider: provider,
   });
 
-  let debounceTimer: NodeJS.Timeout | undefined;
-  const debouncedRefresh = (): void => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    debounceTimer = setTimeout(() => {
-      provider.refresh();
-    }, 2000);
-  };
-
-  context.subscriptions.push(
-    treeView,
-    onGitStateChanged(() => provider.refresh()),
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (doc.uri.scheme !== 'file') {
-        return;
-      }
-      const rel = path.relative(repoRootPath, doc.uri.fsPath);
-      if (rel.startsWith('..') || path.isAbsolute(rel)) {
-        return;
-      }
-      debouncedRefresh();
-    }),
-    new vscode.Disposable(() => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-    })
-  );
+  context.subscriptions.push(treeView, onReviewChanged(() => provider.refresh()));
 
   return provider;
 }

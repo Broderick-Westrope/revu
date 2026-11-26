@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangesFileNode, registerChangesTree } from './changesTree';
-import { CheckpointTreeProvider, registerCheckpointTree } from './checkpointTree';
+import { registerCheckpointTree } from './checkpointTree';
 import { registerCheckpointGuard } from './checkpointGuard';
 import {
   markSafeCommand,
@@ -37,16 +37,13 @@ import { GithubThreadRenderer } from './github/threadRenderer';
 import { ReviewState } from './reviewState';
 import { StackNode, registerStackTree } from './stackTree';
 
-let checkpointProvider: CheckpointTreeProvider | undefined;
 let reviewState: ReviewState | undefined;
 
 function refreshAfterCheckpointChange(): void {
-  checkpointProvider?.refresh();
   void reviewState?.refresh({ external: false });
 }
 
 async function refreshAfterAction(options: { external?: boolean } = {}): Promise<void> {
-  checkpointProvider?.refresh();
   await reviewState?.refresh({ external: options.external ?? false });
 }
 
@@ -109,7 +106,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('revu.openChangesFile', (node: ChangesFileNode) =>
       showDiff(node.file, { repoRoot: node.repoRoot, baseRef: node.baseRef })
     ),
-    vscode.commands.registerCommand('revu.refreshCheckpoint', () => checkpointProvider?.refresh()),
+    vscode.commands.registerCommand('revu.refreshCheckpoint', () =>
+      reviewState?.refresh({ external: false })
+    ),
     vscode.commands.registerCommand('revu.markSafe', (node) =>
       markSafeCommand(node, refreshAfterCheckpointChange)
     ),
@@ -152,15 +151,15 @@ export function activate(context: vscode.ExtensionContext): void {
     registerStackTree(context, state);
     registerChangesTree(context, state);
     registerStackContext(context, state);
-    checkpointProvider = registerCheckpointTree(
-      context,
-      root,
-      gitStateEvent,
-      () => state.snapshot?.stack.current?.diffBase
-    );
     registerCheckpointGuard(context, root, gitStateEvent);
     registerReviewRefresh(context, state, gitStateEvent, renderer, store);
     await state.refresh();
+    registerCheckpointTree(
+      context,
+      root,
+      state.onDidChange,
+      () => state.snapshot?.stack.current?.diffBase
+    );
   })();
 }
 
