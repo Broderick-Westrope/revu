@@ -11,7 +11,11 @@ function stubMemento(): vscode.Memento {
       return data.has(key) ? (data.get(key) as T) : defaultValue;
     },
     update: (key: string, value: unknown): Thenable<void> => {
-      data.set(key, value);
+      if (value === undefined) {
+        data.delete(key);
+      } else {
+        data.set(key, value);
+      }
       return Promise.resolve();
     },
   };
@@ -31,21 +35,27 @@ function makeComment(overrides: Partial<LocalComment> = {}): LocalComment {
   };
 }
 
+async function storeOn(memento: vscode.Memento, branch = 'main'): Promise<CommentStore> {
+  const store = new CommentStore(memento);
+  await store.setBranch(branch);
+  return store;
+}
+
 suite('comment store', () => {
-  test('all returns empty array when nothing stored', () => {
-    const store = new CommentStore(stubMemento());
+  test('all returns empty array when nothing stored', async () => {
+    const store = await storeOn(stubMemento());
     assert.deepStrictEqual(store.all(), []);
   });
 
   test('add persists and all returns the comment', async () => {
-    const store = new CommentStore(stubMemento());
+    const store = await storeOn(stubMemento());
     const comment = makeComment();
     await store.add(comment);
     assert.deepStrictEqual(store.all(), [comment]);
   });
 
   test('update changes only the matching comment text', async () => {
-    const store = new CommentStore(stubMemento());
+    const store = await storeOn(stubMemento());
     await store.add(makeComment({ id: 'a' }));
     await store.add(makeComment({ id: 'b' }));
     await store.update('a', 'revised');
@@ -55,7 +65,7 @@ suite('comment store', () => {
   });
 
   test('remove deletes only the matching comment', async () => {
-    const store = new CommentStore(stubMemento());
+    const store = await storeOn(stubMemento());
     await store.add(makeComment({ id: 'a' }));
     await store.add(makeComment({ id: 'b' }));
     await store.remove('a');
@@ -66,7 +76,7 @@ suite('comment store', () => {
   });
 
   test('clear removes everything', async () => {
-    const store = new CommentStore(stubMemento());
+    const store = await storeOn(stubMemento());
     await store.add(makeComment({ id: 'a' }));
     await store.add(makeComment({ id: 'b' }));
     await store.clear();
@@ -75,15 +85,15 @@ suite('comment store', () => {
 
   test('persistence round-trip through a shared memento', async () => {
     const memento = stubMemento();
-    const first = new CommentStore(memento);
+    const first = await storeOn(memento);
     const comment = makeComment({ id: 'persisted' });
     await first.add(comment);
-    const second = new CommentStore(memento);
+    const second = await storeOn(memento);
     assert.deepStrictEqual(second.all(), [comment]);
   });
 
   test('onDidChange fires on every change', async () => {
-    const store = new CommentStore(stubMemento());
+    const store = await storeOn(stubMemento());
     let fired = 0;
     store.onDidChange(() => {
       fired += 1;
@@ -93,5 +103,15 @@ suite('comment store', () => {
     await store.remove('a');
     await store.clear();
     assert.strictEqual(fired, 4);
+  });
+
+  test('comments added on one branch are hidden on another and return when switching back', async () => {
+    const store = await storeOn(stubMemento(), 'a');
+    const comment = makeComment({ id: 'on-a' });
+    await store.add(comment);
+    await store.setBranch('b');
+    assert.deepStrictEqual(store.all(), []);
+    await store.setBranch('a');
+    assert.deepStrictEqual(store.all(), [comment]);
   });
 });
