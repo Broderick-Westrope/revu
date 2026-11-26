@@ -145,4 +145,29 @@ suite('comment store', () => {
     await store.setBranch(undefined);
     assert.strictEqual(fired, 2);
   });
+
+  test('the legacy comment list moves to the first branch set and only once', async () => {
+    const memento = stubMemento();
+    const legacy = makeComment({ id: 'legacy' });
+    await memento.update('revu.comments', [legacy]);
+    const store = await storeOn(memento, 'a');
+    assert.deepStrictEqual(store.all(), [legacy]);
+    assert.strictEqual(memento.get('revu.comments'), undefined);
+    await store.setBranch('b');
+    assert.deepStrictEqual(store.all(), []);
+    const reopened = await storeOn(memento, 'c');
+    assert.deepStrictEqual(reopened.all(), []);
+    await reopened.setBranch('a');
+    assert.deepStrictEqual(reopened.all(), [legacy]);
+  });
+
+  test('a detached HEAD leaves the legacy list for the next branch', async () => {
+    const memento = stubMemento();
+    const legacy = makeComment({ id: 'legacy' });
+    await memento.update('revu.comments', [legacy]);
+    const store = new CommentStore(memento);
+    await store.setBranch(undefined);
+    await store.setBranch('a');
+    assert.deepStrictEqual(store.all(), [legacy]);
+  });
 });

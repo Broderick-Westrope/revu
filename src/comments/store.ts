@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LocalComment } from './model';
 
+const LEGACY_KEY = 'revu.comments';
 const BRANCH_KEY_PREFIX = 'revu.comments.branch:';
 
 export class CommentStore {
@@ -16,6 +17,7 @@ export class CommentStore {
       return;
     }
     this.branch = branch;
+    await this.migrateLegacy();
     this.emitter.fire();
   }
 
@@ -52,6 +54,16 @@ export class CommentStore {
     }
     await this.memento.update(key, comments);
     this.emitter.fire();
+  }
+
+  private async migrateLegacy(): Promise<void> {
+    const key = this.key();
+    const legacy = this.memento.get<LocalComment[]>(LEGACY_KEY, []);
+    if (!key || legacy.length === 0) {
+      return;
+    }
+    await this.memento.update(key, [...this.all(), ...legacy]);
+    await this.memento.update(LEGACY_KEY, undefined);
   }
 
   private key(): string | undefined {
