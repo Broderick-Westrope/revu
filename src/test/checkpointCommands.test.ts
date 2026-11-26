@@ -17,7 +17,17 @@ import {
   staleConflictRef,
 } from '../commands/checkpoint';
 import { CommitNode } from '../checkpointTree';
-import { EMPTY_REF_SHA } from '../git';
+import { EMPTY_REF_SHA, defaultBranch, mergeBase } from '../git';
+
+
+async function legacyBase(repo: string): Promise<string | undefined> {
+  try {
+    const def = await defaultBranch(repo);
+    return await mergeBase(repo, `refs/heads/${def}`);
+  } catch {
+    return undefined;
+  }
+}
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -110,7 +120,7 @@ suite('checkpoint commands', () => {
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     const c4 = await commitFile(repo, 'f3.txt', 'three\n');
     await markSafe(repo, 'feature', c2);
-    const state = await getCheckpointState(repo);
+    const state = await getCheckpointState(repo, await legacyBase(repo));
     const expected = expectedOldSha(state);
     await git(repo, ['update-ref', 'refs/revu/checkpoint/feature', c3]);
     await assert.rejects(markSafe(repo, 'feature', c4, expected));
@@ -122,10 +132,10 @@ suite('checkpoint commands', () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    const state = await getCheckpointState(repo);
+    const state = await getCheckpointState(repo, await legacyBase(repo));
     assert.strictEqual(state.kind, 'implicit');
     await markSafe(repo, 'feature', c2, expectedOldSha(state));
-    assert.deepStrictEqual(await getCheckpointState(repo), {
+    assert.deepStrictEqual(await getCheckpointState(repo, await legacyBase(repo)), {
       kind: 'explicit',
       branch: 'feature',
       sha: c2,
@@ -136,10 +146,10 @@ suite('checkpoint commands', () => {
     const repo = await makeRepo();
     const rootSha = (await git(repo, ['rev-parse', 'HEAD'])).trim();
     await git(repo, ['checkout', '-b', 'feature']);
-    const state = await getCheckpointState(repo);
+    const state = await getCheckpointState(repo, await legacyBase(repo));
     assert.strictEqual(state.kind, 'needsInit');
     await markSafe(repo, 'feature', rootSha, expectedOldSha(state));
-    assert.deepStrictEqual(await getCheckpointState(repo), {
+    assert.deepStrictEqual(await getCheckpointState(repo, await legacyBase(repo)), {
       kind: 'explicit',
       branch: 'feature',
       sha: rootSha,
@@ -153,7 +163,7 @@ suite('checkpoint commands', () => {
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     await markSafe(repo, 'feature', c2);
     await removeCheckpoint(repo, 'feature');
-    assert.deepStrictEqual(await getCheckpointState(repo), {
+    assert.deepStrictEqual(await getCheckpointState(repo, await legacyBase(repo)), {
       kind: 'implicit',
       branch: 'feature',
       sha: mainTip,
@@ -180,7 +190,7 @@ suite('checkpoint commands', () => {
       unreviewed.map((c) => c.sha),
       [c4, c3]
     );
-    const reviewed = await reviewedCommits(repo, c2);
+    const reviewed = await reviewedCommits(repo, c2, await legacyBase(repo));
     assert.deepStrictEqual(
       reviewed.commits.map((c) => c.sha),
       [c2]
@@ -194,7 +204,7 @@ suite('checkpoint commands', () => {
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     const c4 = await commitFile(repo, 'f3.txt', 'three\n');
     await markSafe(repo, 'feature', c3);
-    const state = await getCheckpointState(repo);
+    const state = await getCheckpointState(repo, await legacyBase(repo));
     const expected = expectedOldSha(state);
     await git(repo, ['update-ref', 'refs/revu/checkpoint/feature', c4]);
     await assert.rejects(markSafe(repo, 'feature', c2, expected));

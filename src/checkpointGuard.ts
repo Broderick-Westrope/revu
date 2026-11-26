@@ -61,7 +61,7 @@ export function registerCheckpointGuard(
     }
     checking = true;
     try {
-      const state = await getCheckpointState(root);
+      const state = await getCheckpointState(root, undefined);
       if (state.kind !== 'orphaned') {
         promptedOrphanShas.clear();
       }

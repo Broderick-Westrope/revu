@@ -91,7 +91,7 @@ async function markSafeAt(
 }
 
 async function moveCheckpointTo(node: CommitNode, refresh: () => void): Promise<void> {
-  const state = await getCheckpointState(node.repoRoot);
+  const state = await getCheckpointState(node.repoRoot, undefined);
   if (state.kind === 'detached') {
     void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
     return;
@@ -179,7 +179,7 @@ export async function removeCheckpointCommand(refresh: () => void): Promise<void
   if (!root) {
     return;
   }
-  const state = await getCheckpointState(root);
+  const state = await getCheckpointState(root, undefined);
   if (state.kind === 'detached') {
     void vscode.window.showErrorMessage('Revu: checkpoint is disabled on a detached HEAD');
     return;

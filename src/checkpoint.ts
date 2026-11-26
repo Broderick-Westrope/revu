@@ -31,7 +31,7 @@ export type CheckpointState =
 
 export async function getCheckpointState(
   repoRoot: string,
-  implicitBase?: string
+  implicitBase: string | undefined
 ): Promise<CheckpointState> {
   if (await isDetachedHead(repoRoot)) {
     return { kind: 'detached' };
@@ -45,20 +45,10 @@ export async function getCheckpointState(
     }
     return { kind: 'orphaned', branch, sha };
   }
-  let base: string;
-  if (implicitBase) {
-    base = implicitBase;
-  } else {
-    try {
-      const def = await defaultBranch(repoRoot);
-      if (branch === def) {
-        return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
-      }
-      base = await mergeBase(repoRoot, branchRef(def));
-    } catch {
-      return { kind: 'needsInit', branch, reason: 'noDefaultBranch' };
-    }
+  if (!implicitBase) {
+    return { kind: 'needsInit', branch, reason: 'noDefaultBranch' };
   }
+  const base = implicitBase;
   const branchTip = await resolveRef(repoRoot, branchRef(branch));
   if (base === branchTip) {
     return { kind: 'needsInit', branch, reason: 'onDefaultBranch' };
@@ -97,20 +87,9 @@ export interface ReviewedCommits {
 export async function reviewedCommits(
   repoRoot: string,
   checkpointSha: string,
-  implicitBase?: string
+  implicitBase: string | undefined
 ): Promise<ReviewedCommits> {
-  let range = checkpointSha;
-  if (implicitBase) {
-    range = `${implicitBase}..${checkpointSha}`;
-  } else {
-    try {
-      const def = await defaultBranch(repoRoot);
-      const base = await mergeBase(repoRoot, branchRef(def));
-      range = `${base}..${checkpointSha}`;
-    } catch {
-      // no default branch → fall back to listing from the checkpoint
-    }
-  }
+  const range = implicitBase ? `${implicitBase}..${checkpointSha}` : checkpointSha;
   const commits = await listCommits(repoRoot, range, REVIEWED_COMMITS_CAP + 1);
   return {
     commits: commits.slice(0, REVIEWED_COMMITS_CAP),

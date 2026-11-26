@@ -11,7 +11,7 @@ import {
   CommitNode,
   summaryDescription,
 } from '../checkpointTree';
-import { showFile } from '../git';
+import { defaultBranch, mergeBase, showFile } from '../git';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -55,14 +55,24 @@ interface Captured {
   description: string | undefined;
 }
 
-function makeProvider(
+async function legacyBase(repo: string): Promise<string | undefined> {
+  try {
+    const def = await defaultBranch(repo);
+    return await mergeBase(repo, `refs/heads/${def}`);
+  } catch {
+    return undefined;
+  }
+}
+
+async function makeProvider(
   repo: string,
   implicitBase?: string
-): { provider: CheckpointTreeProvider; captured: Captured } {
+): Promise<{ provider: CheckpointTreeProvider; captured: Captured }> {
   const captured: Captured = { message: undefined, description: undefined };
+  const base = implicitBase ?? (await legacyBase(repo));
   const provider = new CheckpointTreeProvider(
     repo,
-    () => implicitBase,
+    () => base,
     (message) => {
       captured.message = message;
     },
@@ -89,7 +99,7 @@ suite('checkpoint tree provider', () => {
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const roots = await provider.getChildren();
     assert.deepStrictEqual(
       roots.map((n) => (n.kind === 'commit' ? n.commit.sha : n.kind)),
@@ -107,7 +117,7 @@ suite('checkpoint tree provider', () => {
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     await markSafe(repo, 'feature', c2);
-    const { provider } = makeProvider(repo, parentTip);
+    const { provider } = await makeProvider(repo, parentTip);
     const commits = commitNodes(await provider.getChildren());
     assert.deepStrictEqual(
       commits.map((n) => n.commit.sha),
@@ -121,7 +131,7 @@ suite('checkpoint tree provider', () => {
     const parentTip = await commitFile(repo, 'p.txt', 'parent\n');
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    const { provider } = makeProvider(repo, parentTip);
+    const { provider } = await makeProvider(repo, parentTip);
     const commits = commitNodes(await provider.getChildren());
     assert.deepStrictEqual(
       commits.map((n) => n.commit.sha),
@@ -137,7 +147,7 @@ suite('checkpoint tree provider', () => {
     await commitFile(repo, 'm.txt', 'main\n');
     await git(repo, ['checkout', 'feature']);
     await git(repo, ['merge', '--no-edit', 'main']);
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const merge = commitNodes(await provider.getChildren()).find(
       (n) => n.commit.parents.length === 2
     );
@@ -157,7 +167,7 @@ suite('checkpoint tree provider', () => {
     fs.writeFileSync(path.join(repo, 'base.txt'), 'resolved\n');
     await git(repo, ['add', 'base.txt']);
     await git(repo, ['commit', '--no-edit']);
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const merge = commitNodes(await provider.getChildren()).find(
       (n) => n.commit.parents.length === 2
     );
@@ -177,7 +187,7 @@ suite('checkpoint tree provider', () => {
     const mainTip = (await git(repo, ['rev-parse', 'HEAD'])).trim();
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     assert.strictEqual(commits.length, 1);
     assert.strictEqual(commits[0].commit.sha, c2);
@@ -189,7 +199,7 @@ suite('checkpoint tree provider', () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     const files = await provider.getChildren(commits[0]);
     assert.strictEqual(files.length, 1);
@@ -206,7 +216,7 @@ suite('checkpoint tree provider', () => {
     await git(repo, ['checkout', '-b', 'feature']);
     await commitFile(repo, 'f1.txt', 'one\n');
     fs.writeFileSync(path.join(repo, 'untracked.txt'), 'new\n');
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     await provider.getChildren();
     assert.strictEqual(captured.description, '1 commit + dirty working tree');
   });
@@ -217,7 +227,7 @@ suite('checkpoint tree provider', () => {
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     await markSafe(repo, 'feature', c2);
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     assert.deepStrictEqual(
       commits.map((n) => n.commit.sha),
@@ -241,7 +251,7 @@ suite('checkpoint tree provider', () => {
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     await commitFile(repo, 'f2.txt', 'two\n');
     await markSafe(repo, 'feature', c2);
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     const reviewed = commits.filter((n) => n.reviewed);
     assert.strictEqual(reviewed.length, 1);
@@ -256,7 +266,7 @@ suite('checkpoint tree provider', () => {
     const c3 = await commitFile(repo, 'f2.txt', 'two\n');
     await commitFile(repo, 'f3.txt', 'three\n');
     await markSafe(repo, 'feature', c3);
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     const bySha = new Map(commits.map((n) => [n.commit.sha, provider.getTreeItem(n)]));
     const unreviewedItem = commits.find((n) => !n.reviewed);
@@ -284,7 +294,7 @@ suite('checkpoint tree provider', () => {
     const c2 = await commitFile(repo, 'f1.txt', 'one\n');
     await commitFile(repo, 'f2.txt', 'two\n');
     await markSafe(repo, 'feature', c2);
-    const { provider } = makeProvider(repo);
+    const { provider } = await makeProvider(repo);
     const commits = commitNodes(await provider.getChildren());
     const reviewed = commits.find((n) => n.reviewed);
     assert.ok(reviewed);
@@ -307,7 +317,7 @@ suite('checkpoint tree provider', () => {
     }
     await commitFile(repo, 'unreviewed.txt', 'later\n');
     await markSafe(repo, 'feature', tip);
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const roots = await provider.getChildren();
     const last = roots[roots.length - 1];
     assert.strictEqual(last.kind, 'reviewedOverflow');
@@ -323,7 +333,7 @@ suite('checkpoint tree provider', () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     await commitFile(repo, 'f1.txt', 'one\n');
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const roots = await provider.getChildren();
     const commits = commitNodes(roots);
     assert.deepStrictEqual(
@@ -342,7 +352,7 @@ suite('checkpoint tree provider', () => {
     fs.writeFileSync(path.join(repo, 'f1.txt'), 'rewritten\n');
     await git(repo, ['add', 'f1.txt']);
     await git(repo, ['commit', '--amend', '-m', 'rewritten']);
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const roots = await provider.getChildren();
     assert.match(captured.message ?? '', /orphaned/);
     assert.strictEqual(roots.length, 1);
@@ -354,7 +364,7 @@ suite('checkpoint tree provider', () => {
   test('detached HEAD shows a message and no nodes', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '--detach']);
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const roots = await provider.getChildren();
     assert.deepStrictEqual(roots, []);
     assert.match(captured.message ?? '', /detached HEAD/);
@@ -362,7 +372,7 @@ suite('checkpoint tree provider', () => {
 
   test('needsInit shows a message prompting Set Checkpoint', async () => {
     const repo = await makeRepo();
-    const { provider, captured } = makeProvider(repo);
+    const { provider, captured } = await makeProvider(repo);
     const roots = await provider.getChildren();
     assert.deepStrictEqual(roots, []);
     assert.match(captured.message ?? '', /Set Checkpoint/);

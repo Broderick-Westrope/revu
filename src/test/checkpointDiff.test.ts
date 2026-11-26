@@ -13,7 +13,7 @@ import {
   openCommitDiff,
   resolveWorkingTreeTarget,
 } from '../commands/checkpointDiff';
-import { ChangedFile, listCommits } from '../git';
+import { ChangedFile, defaultBranch, listCommits, mergeBase } from '../git';
 import { GitUriQuery, makeGitUri } from '../gitContentProvider';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
@@ -53,6 +53,16 @@ async function commitFile(repo: string, name: string, content: string): Promise<
   return (await git(repo, ['rev-parse', 'HEAD'])).trim();
 }
 
+
+async function legacyBase(repo: string): Promise<string | undefined> {
+  try {
+    const def = await defaultBranch(repo);
+    return await mergeBase(repo, `refs/heads/${def}`);
+  } catch {
+    return undefined;
+  }
+}
+
 suite('checkpoint diff URIs', () => {
   suiteTeardown(() => {
     for (const repo of repos) {
@@ -64,7 +74,8 @@ suite('checkpoint diff URIs', () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-b', 'feature']);
     await commitFile(repo, 'f1.txt', 'one\n');
-    const provider = new CheckpointTreeProvider(repo, () => undefined);
+    const base = await legacyBase(repo);
+    const provider = new CheckpointTreeProvider(repo, () => base);
     const roots = await provider.getChildren();
     const commit = roots.find((n): n is CommitNode => n.kind === 'commit');
     assert.ok(commit);
@@ -98,7 +109,8 @@ suite('checkpoint diff URIs', () => {
     fs.writeFileSync(path.join(repo, 'base.txt'), 'resolved\n');
     await git(repo, ['add', 'base.txt']);
     await git(repo, ['commit', '--no-edit']);
-    const provider = new CheckpointTreeProvider(repo, () => undefined);
+    const base = await legacyBase(repo);
+    const provider = new CheckpointTreeProvider(repo, () => base);
     const merge = (await provider.getChildren()).find(
       (n): n is CommitNode => n.kind === 'commit' && n.commit.parents.length === 2
     );
