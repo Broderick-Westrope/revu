@@ -333,6 +333,19 @@ suite('branch actions', () => {
       assert.deepStrictEqual(await mergeParent(repo, onA), { kind: 'upToDate' });
     });
 
+    test('reports a merge already in progress instead of starting another', async () => {
+      const repo = await stacked();
+      await git(repo, ['checkout', '-q', 'a']);
+      await commitFile(repo, 'shared.txt', 'from a\n');
+      await git(repo, ['checkout', '-q', 'b']);
+      await commitFile(repo, 'shared.txt', 'from b\n');
+      await mergeParent(repo, onA);
+      await git(repo, ['checkout', '--ours', 'shared.txt']);
+      await git(repo, ['add', 'shared.txt']);
+
+      assert.deepStrictEqual(await mergeParent(repo, onA), { kind: 'mergeInProgress' });
+    });
+
     test('leaves a conflicting merge in progress', async () => {
       const repo = await stacked();
       await git(repo, ['checkout', '-q', 'a']);

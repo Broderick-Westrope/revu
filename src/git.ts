@@ -24,6 +24,12 @@ export function git(cwd: string, args: string[], okCodes: number[] = []): Promis
   return run('git', args, { cwd, okCodes, env: GIT_ENV });
 }
 
+const FETCH_TIMEOUT_MS = 120000;
+
+export async function fetchOrigin(cwd: string): Promise<void> {
+  await run('git', ['fetch', 'origin'], { cwd, env: GIT_ENV, timeout: FETCH_TIMEOUT_MS });
+}
+
 export async function mergeTree(cwd: string, ours: string, theirs: string): Promise<string> {
   const output = await git(cwd, ['merge-tree', '--write-tree', ours, theirs], [1]);
   return output.split('\n')[0].trim();

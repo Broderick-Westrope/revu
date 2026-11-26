@@ -2,6 +2,7 @@ import { checkpointRef } from './checkpoint';
 import {
   Worktrees,
   checkedOutBranch,
+  fetchOrigin,
   git,
   hasTrackedChanges,
   isAncestor,
@@ -52,7 +53,7 @@ export type PullResult =
   | { kind: 'stayedBehind'; reason: 'notOnTrunk'; branch?: string };
 
 export async function pullDefaultBranch(cwd: string, trunk: string): Promise<PullResult> {
-  await git(cwd, ['fetch', 'origin']);
+  await fetchOrigin(cwd);
   const upstream = `origin/${trunk}`;
   const local = await resolveRef(cwd, `refs/heads/${trunk}`);
   if (local && (await isAncestor(cwd, upstream, local))) {
@@ -82,6 +83,7 @@ export interface MergeTarget {
 export type MergeResult =
   | { kind: 'dirty' }
   | { kind: 'branchChanged' }
+  | { kind: 'mergeInProgress' }
   | { kind: 'upToDate' }
   | { kind: 'conflict' }
   | { kind: 'merged'; checkpointMoved: boolean };
@@ -93,11 +95,14 @@ export async function mergeParent(
   if ((await checkedOutBranch(cwd)) !== target.branch) {
     return { kind: 'branchChanged' };
   }
+  if (await resolveRef(cwd, 'MERGE_HEAD')) {
+    return { kind: 'mergeInProgress' };
+  }
   if (await hasTrackedChanges(cwd)) {
     return { kind: 'dirty' };
   }
   if (target.parentRef.startsWith('origin/')) {
-    await git(cwd, ['fetch', 'origin']);
+    await fetchOrigin(cwd);
   }
   const before = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
   try {

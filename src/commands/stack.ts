@@ -11,6 +11,12 @@ function errorText(err: unknown): string {
   return stderr || (err instanceof Error ? err.message : String(err));
 }
 
+function hasUnsavedFiles(root: string): boolean {
+  return vscode.workspace.textDocuments.some(
+    (doc) => doc.isDirty && doc.uri.scheme === 'file' && isInside(root, doc.uri.fsPath)
+  );
+}
+
 function openFolder(folder: string, forceNewWindow: boolean): Thenable<unknown> {
   return vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(folder), {
     forceNewWindow,
@@ -59,9 +65,7 @@ export async function switchToBranchCommand(
         stack.current?.inGhStack === true && stack.branches.get(node.branch)?.inGhStack === true,
       dirty:
         (await hasTrackedChanges(root)) ||
-        vscode.workspace.textDocuments.some(
-          (doc) => doc.isDirty && doc.uri.scheme === 'file' && isInside(root, doc.uri.fsPath)
-        ),
+        hasUnsavedFiles(root),
     });
     switch (plan.kind) {
       case 'none':
@@ -168,6 +172,10 @@ export async function mergeParentCommand(state: ReviewState): Promise<void> {
     );
     return;
   }
+  if (hasUnsavedFiles(state.repoRoot)) {
+    void vscode.window.showWarningMessage('Revu: save your files before merging the parent.');
+    return;
+  }
   if (current.ambiguous) {
     const choice = await vscode.window.showWarningMessage(
       `Revu: ${current.parent} is a guess at this branch's parent. Merge it into ${current.branch} anyway?`,
@@ -184,6 +192,11 @@ export async function mergeParentCommand(state: ReviewState): Promise<void> {
       () => mergeParent(state.repoRoot, current)
     );
     switch (result.kind) {
+      case 'mergeInProgress':
+        void vscode.window.showWarningMessage(
+          'Revu: a merge is already in progress here. Finish or abort it in Source Control first.'
+        );
+        break;
       case 'branchChanged':
         void vscode.window.showWarningMessage(
           `Revu: ${current.branch} is no longer checked out here, so nothing was merged.`
