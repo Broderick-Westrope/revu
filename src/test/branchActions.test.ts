@@ -8,6 +8,7 @@ import {
   aheadBehind,
   hasTrackedChanges,
   listWorktrees,
+  mergeParent,
   planSwitch,
   pullDefaultBranch,
 } from '../branchActions';
@@ -227,6 +228,100 @@ suite('branch actions', () => {
       const result = await pullDefaultBranch(remote.repo, 'main');
 
       assert.deepStrictEqual(result, { kind: 'stayedBehind', reason: 'diverged' });
+    });
+  });
+
+  suite('mergeParent', () => {
+    async function stacked(): Promise<string> {
+      const repo = await localRepo();
+      await git(repo, ['checkout', '-q', '-b', 'a']);
+      await commitFile(repo, 'a1.txt');
+      await git(repo, ['checkout', '-q', '-b', 'b']);
+      await commitFile(repo, 'b1.txt');
+      await git(repo, ['checkout', '-q', 'a']);
+      await commitFile(repo, 'a2.txt');
+      await git(repo, ['checkout', '-q', 'b']);
+      return repo;
+    }
+
+    const onA = { branch: 'b', parent: 'a', parentRef: 'a' };
+
+    test('merges new parent commits into the branch', async () => {
+      const repo = await stacked();
+
+      const result = await mergeParent(repo, onA, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
+      assert.ok(fs.existsSync(path.join(repo, 'a2.txt')));
+    });
+
+    test('refuses with tracked changes and changes nothing', async () => {
+      const repo = await stacked();
+      const before = await rev(repo, 'HEAD');
+      fs.writeFileSync(path.join(repo, 'b1.txt'), 'edited\n');
+
+      const result = await mergeParent(repo, onA, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'dirty' });
+      assert.strictEqual(await rev(repo, 'HEAD'), before);
+    });
+
+    test('reports up to date when the parent has nothing new', async () => {
+      const repo = await stacked();
+      await mergeParent(repo, onA, 'main');
+
+      assert.deepStrictEqual(await mergeParent(repo, onA, 'main'), { kind: 'upToDate' });
+    });
+
+    test('leaves a conflicting merge in progress', async () => {
+      const repo = await stacked();
+      await git(repo, ['checkout', '-q', 'a']);
+      await commitFile(repo, 'shared.txt', 'from a\n');
+      await git(repo, ['checkout', '-q', 'b']);
+      await commitFile(repo, 'shared.txt', 'from b\n');
+
+      const result = await mergeParent(repo, onA, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'conflict' });
+      assert.ok(await rev(repo, 'MERGE_HEAD'));
+    });
+
+    test('fetches origin first when the parent is the trunk', async () => {
+      const remote = await cloneWithOrigin();
+      await git(remote.repo, ['checkout', '-q', '-b', 'a']);
+      await commitFile(remote.repo, 'a1.txt');
+      await upstreamCommit(remote, 'up.txt');
+
+      const result = await mergeParent(
+        remote.repo,
+        { branch: 'a', parent: 'main', parentRef: 'origin/main' },
+        'main'
+      );
+
+      assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
+      assert.ok(fs.existsSync(path.join(remote.repo, 'up.txt')));
+    });
+
+    test('moves a checkpoint at the pre-merge HEAD to the merge commit', async () => {
+      const repo = await stacked();
+      await git(repo, ['update-ref', 'refs/revu/checkpoint/b', 'HEAD']);
+
+      const result = await mergeParent(repo, onA, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: true });
+      assert.strictEqual(await rev(repo, 'refs/revu/checkpoint/b'), await rev(repo, 'HEAD'));
+    });
+
+    test('leaves a checkpoint below the pre-merge HEAD where it was', async () => {
+      const repo = await stacked();
+      const checkpoint = await rev(repo, 'HEAD');
+      await commitFile(repo, 'b2.txt');
+      await git(repo, ['update-ref', 'refs/revu/checkpoint/b', checkpoint]);
+
+      const result = await mergeParent(repo, onA, 'main');
+
+      assert.deepStrictEqual(result, { kind: 'merged', checkpointMoved: false });
+      assert.strictEqual(await rev(repo, 'refs/revu/checkpoint/b'), checkpoint);
     });
   });
 });

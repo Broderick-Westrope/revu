@@ -1,4 +1,5 @@
-import { git, isAncestor, resolveRef } from './git';
+import { checkpointRef } from './checkpoint';
+import { git, isAncestor, resolveRef, updateRef } from './git';
 
 export interface Worktrees {
   main: string;
@@ -102,4 +103,48 @@ export async function pullDefaultBranch(cwd: string, trunk: string): Promise<Pul
     return { kind: 'stayedBehind', reason: 'diverged' };
   }
   return { kind: 'fastForwarded' };
+}
+
+export interface MergeTarget {
+  branch: string;
+  parent: string;
+  parentRef: string;
+}
+
+export type MergeResult =
+  | { kind: 'dirty' }
+  | { kind: 'upToDate' }
+  | { kind: 'conflict' }
+  | { kind: 'merged'; checkpointMoved: boolean };
+
+export async function mergeParent(
+  cwd: string,
+  target: MergeTarget,
+  trunk: string
+): Promise<MergeResult> {
+  if (await hasTrackedChanges(cwd)) {
+    return { kind: 'dirty' };
+  }
+  if (target.parent === trunk && target.parentRef === `origin/${trunk}`) {
+    await git(cwd, ['fetch', 'origin']);
+  }
+  const before = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
+  try {
+    await git(cwd, ['merge', '--no-edit', target.parentRef]);
+  } catch (err) {
+    if (await resolveRef(cwd, 'MERGE_HEAD')) {
+      return { kind: 'conflict' };
+    }
+    throw err;
+  }
+  const after = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
+  if (after === before) {
+    return { kind: 'upToDate' };
+  }
+  const ref = checkpointRef(target.branch);
+  if ((await resolveRef(cwd, ref)) !== before) {
+    return { kind: 'merged', checkpointMoved: false };
+  }
+  await updateRef(cwd, ref, after, before);
+  return { kind: 'merged', checkpointMoved: true };
 }
