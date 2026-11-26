@@ -117,7 +117,7 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
       this.setDescription?.(undefined);
       return [];
     }
-    let description = current.onTrunk ? 'on trunk' : parentDescription(current);
+    let description = current.onTrunk ? `on ${current.parent}` : parentDescription(current);
     if (snapshot.checkpointMode) {
       description += ' · since checkpoint';
     }
@@ -126,7 +126,17 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
     if (!snapshot.base) {
       return [];
     }
-    return buildTree(await this.state.files(), snapshot.base, this.state.repoRoot);
+    let files: ChangedFile[];
+    try {
+      files = await this.state.files();
+    } catch (err) {
+      this.setMessage?.(`Revu could not list changes: ${(err as Error).message}`);
+      return [];
+    }
+    if (files.length === 0) {
+      this.setMessage?.(`No changes against ${current.parent}.`);
+    }
+    return buildTree(files, snapshot.base, this.state.repoRoot);
   }
 
   getTreeItem(element: ChangesNode): vscode.TreeItem {

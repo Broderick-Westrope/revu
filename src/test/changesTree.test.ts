@@ -129,6 +129,14 @@ suite('changes tree provider', () => {
     assert.deepStrictEqual(await filePaths(provider), ['first.txt']);
   });
 
+  test('a branch with nothing to review says so', async () => {
+    const repo = await makeStack();
+    const { provider, captured } = await setup(repo);
+
+    assert.deepStrictEqual(await provider.getChildren(), []);
+    assert.strictEqual(captured.message, 'No changes against a.');
+  });
+
   test('on the trunk branch the view says so', async () => {
     const repo = await makeStack();
     await git(repo, ['checkout', '-q', 'main']);
@@ -136,7 +144,7 @@ suite('changes tree provider', () => {
 
     await provider.getChildren();
 
-    assert.strictEqual(captured.description, 'on trunk');
+    assert.strictEqual(captured.description, 'on main');
   });
 
   test('a conflicted file row shows conflict as its description', async () => {
