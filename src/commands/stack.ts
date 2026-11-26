@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { mergeParent, planSwitch, pullDefaultBranch, PullResult } from '../branchActions';
-import { checkedOutBranch, git, hasTrackedChanges, isInside, listWorktrees } from '../git';
+import { checkedOutBranch, git, hasTrackedChanges, isInside, listWorktrees, realPath } from '../git';
 import { ReviewState } from '../reviewState';
 import { descendantsOf, resetParentOverride, setParentOverride } from '../stack';
 import { StackNode } from '../stackTree';
@@ -59,7 +59,7 @@ export async function switchToBranchCommand(
       target: node.branch,
       trunk: stack.trunk.name,
       current: stack.current?.branch,
-      currentWorktree: root,
+      currentWorktree: realPath(root),
       worktrees: await listWorktrees(root),
       sameGhStack:
         stack.current?.inGhStack === true && stack.branches.get(node.branch)?.inGhStack === true,

@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ChangesFileNode, registerChangesTree } from './changesTree';
 import { registerCheckpointTree } from './checkpointTree';
@@ -142,6 +143,9 @@ export function activate(context: vscode.ExtensionContext): void {
     let root: string;
     try {
       root = await repoRoot(folder.uri.fsPath);
+      if (fs.realpathSync(folder.uri.fsPath) === fs.realpathSync(root)) {
+        root = folder.uri.fsPath;
+      }
     } catch {
       void vscode.commands.executeCommand('setContext', 'revu.isGitRepo', false);
       return;

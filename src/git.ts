@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { run } from './exec';
 
@@ -260,6 +261,15 @@ export async function aheadBehind(
 }
 
 export function isInside(root: string, file: string): boolean {
-  const rel = path.relative(root, file);
+  const rel = path.relative(realPath(root), realPath(file));
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+export function realPath(target: string): string {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    const parent = path.dirname(target);
+    return parent === target ? target : path.join(realPath(parent), path.basename(target));
+  }
 }

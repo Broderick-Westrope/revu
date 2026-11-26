@@ -9,6 +9,7 @@ import {
   mergeBase,
   repoRoot,
   showFile,
+  isInside,
 } from '../git';
 
 function run(cwd: string, cmd: string, args: string[]): Promise<string> {
@@ -142,5 +143,11 @@ suite('git wrapper during a conflicted merge', () => {
       files.find((f) => f.path === 'restored.txt'),
       { path: 'restored.txt', status: 'X' }
     );
+  });
+  test('isInside sees through a symlinked folder', () => {
+    const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'revu-link-')), 'repo');
+    fs.symlinkSync(repo, link);
+    assert.strictEqual(isInside(repo, path.join(link, 'a.txt')), true);
+    assert.strictEqual(isInside(link, path.join(repo, 'a.txt')), true);
   });
 });

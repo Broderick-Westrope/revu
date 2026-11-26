@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Worktrees, aheadBehind } from './git';
+import { Worktrees, aheadBehind, realPath } from './git';
 import { logWarningOnce } from './log';
 import { ReviewState } from './reviewState';
 import { BranchResolution, CurrentResolution, StackResult } from './stack';
@@ -44,7 +44,12 @@ export class StackTreeProvider implements vscode.TreeDataProvider<StackNode> {
     }
     this.setMessage?.(undefined);
     const repoRoot = this.state.repoRoot;
-    const root = buildStackTree(snapshot.stack, snapshot.stack.current, snapshot.stack.worktrees, repoRoot);
+    const root = buildStackTree(
+      snapshot.stack,
+      snapshot.stack.current,
+      snapshot.stack.worktrees,
+      realPath(repoRoot)
+    );
     await Promise.all(
       flatten(root).map(async (node) => {
         if (node.isTrunk || !node.isLocal || !node.resolution) {
