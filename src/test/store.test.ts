@@ -114,4 +114,19 @@ suite('comment store', () => {
     await store.setBranch('a');
     assert.deepStrictEqual(store.all(), [comment]);
   });
+
+  test('a detached HEAD shows no comments and refuses new ones', async () => {
+    const memento = stubMemento();
+    const store = await storeOn(memento, 'a');
+    await store.add(makeComment({ id: 'on-a' }));
+    await store.setBranch(undefined);
+    assert.deepStrictEqual(store.all(), []);
+    await assert.rejects(store.add(makeComment({ id: 'detached' })));
+    await store.setBranch('a');
+    assert.deepStrictEqual(
+      store.all().map((c) => c.id),
+      ['on-a']
+    );
+    assert.deepStrictEqual(memento.keys(), ['revu.comments.branch:a']);
+  });
 });

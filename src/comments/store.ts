@@ -16,36 +16,41 @@ export class CommentStore {
   }
 
   all(): LocalComment[] {
-    return this.memento.get<LocalComment[]>(this.key(), []);
+    const key = this.key();
+    return key ? this.memento.get<LocalComment[]>(key, []) : [];
   }
 
   async add(comment: LocalComment): Promise<void> {
-    await this.memento.update(this.key(), [...this.all(), comment]);
+    const key = this.key();
+    if (!key) {
+      throw new Error('Revu: local comments need a checked-out branch.');
+    }
+    await this.memento.update(key, [...this.all(), comment]);
     this.emitter.fire();
   }
 
   async update(id: string, text: string): Promise<void> {
-    await this.memento.update(
-      this.key(),
-      this.all().map((c) => (c.id === id ? { ...c, text } : c))
-    );
-    this.emitter.fire();
+    await this.write(this.all().map((c) => (c.id === id ? { ...c, text } : c)));
   }
 
   async remove(id: string): Promise<void> {
-    await this.memento.update(
-      this.key(),
-      this.all().filter((c) => c.id !== id)
-    );
-    this.emitter.fire();
+    await this.write(this.all().filter((c) => c.id !== id));
   }
 
   async clear(): Promise<void> {
-    await this.memento.update(this.key(), []);
+    await this.write([]);
+  }
+
+  private async write(comments: LocalComment[]): Promise<void> {
+    const key = this.key();
+    if (!key) {
+      return;
+    }
+    await this.memento.update(key, comments);
     this.emitter.fire();
   }
 
-  private key(): string {
-    return `${BRANCH_KEY_PREFIX}${this.branch}`;
+  private key(): string | undefined {
+    return this.branch === undefined ? undefined : `${BRANCH_KEY_PREFIX}${this.branch}`;
   }
 }
