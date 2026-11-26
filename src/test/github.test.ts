@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { parseThreadsResponse } from '../github/gh';
+import { parseGhStackView, parsePrList, parseThreadsResponse } from '../github/gh';
 
 interface FixtureComment {
   body: string;
@@ -214,5 +214,37 @@ suite('github thread parsing', () => {
       threads.map((t) => t.path),
       ['src/a.ts', 'src/b.ts']
     );
+  });
+});
+
+suite('github stack and PR list parsing', () => {
+  test('parses gh stack view JSON into layers trunk-first', () => {
+    const json = JSON.stringify({
+      trunk: 'main',
+      currentBranch: 'api',
+      branches: [
+        { name: 'auth', head: 'h1', base: 'b1', isCurrent: false, isMerged: true, isQueued: false, needsRebase: false, pr: { number: 1, url: 'u1', state: 'MERGED' } },
+        { name: 'api', head: 'h2', base: 'b2', isCurrent: true, isMerged: false, isQueued: false, needsRebase: true },
+      ],
+    });
+
+    assert.deepStrictEqual(parseGhStackView(json), {
+      trunk: 'main',
+      branches: [
+        { name: 'auth', base: 'b1', isMerged: true, needsRebase: false },
+        { name: 'api', base: 'b2', isMerged: false, needsRebase: true },
+      ],
+    });
+  });
+
+  test('parses gh pr list JSON and drops unknown states', () => {
+    const json = JSON.stringify([
+      { number: 4, url: 'u4', state: 'OPEN', headRefName: 'b', baseRefName: 'a' },
+      { number: 5, url: 'u5', state: 'WEIRD', headRefName: 'c', baseRefName: 'main' },
+    ]);
+
+    assert.deepStrictEqual(parsePrList(json), [
+      { number: 4, url: 'u4', state: 'OPEN', headRefName: 'b', baseRefName: 'a' },
+    ]);
   });
 });

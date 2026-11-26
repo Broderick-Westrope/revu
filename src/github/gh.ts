@@ -1,5 +1,6 @@
 import { execFile } from 'child_process';
 import { GhReviewThread, PrMetadata } from './model';
+import { GhStackView, PrSummary, StackExternal } from '../stack';
 
 function gh(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -168,4 +169,60 @@ export async function fetchReviewThreads(cwd: string, prNumber: number): Promise
     `pr=${prNumber}`,
   ]);
   return parseThreadsResponse(output);
+}
+
+interface RawStackBranch {
+  name: string;
+  base: string;
+  isMerged: boolean;
+  needsRebase: boolean;
+}
+
+export function parseGhStackView(json: string): GhStackView {
+  const raw = JSON.parse(json) as { trunk: string; branches: RawStackBranch[] };
+  return {
+    trunk: raw.trunk,
+    branches: raw.branches.map((b) => ({
+      name: b.name,
+      base: b.base,
+      isMerged: b.isMerged,
+      needsRebase: b.needsRebase,
+    })),
+  };
+}
+
+const PR_STATES = new Set(['OPEN', 'MERGED', 'CLOSED']);
+
+export function parsePrList(json: string): PrSummary[] {
+  const raw = JSON.parse(json) as PrSummary[];
+  return raw
+    .filter((pr) => PR_STATES.has(pr.state))
+    .map((pr) => ({
+      number: pr.number,
+      url: pr.url,
+      state: pr.state,
+      headRefName: pr.headRefName,
+      baseRefName: pr.baseRefName,
+    }));
+}
+
+const PR_FIELDS = 'number,url,state,headRefName,baseRefName';
+
+export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
+  if (!(await isGhAvailable(cwd))) {
+    return { prs: [] };
+  }
+  const [list, current, ghStack] = await Promise.all([
+    gh(cwd, ['pr', 'list', '--state', 'all', '--limit', '200', '--json', PR_FIELDS])
+      .then(parsePrList)
+      .catch(() => [] as PrSummary[]),
+    gh(cwd, ['pr', 'view', '--json', PR_FIELDS])
+      .then((out) => parsePrList(`[${out}]`))
+      .catch(() => [] as PrSummary[]),
+    gh(cwd, ['stack', 'view', '--json'])
+      .then(parseGhStackView)
+      .catch(() => undefined),
+  ]);
+  const prs = [...current, ...list.filter((pr) => !current.some((c) => c.number === pr.number))];
+  return { prs, ghStack };
 }
