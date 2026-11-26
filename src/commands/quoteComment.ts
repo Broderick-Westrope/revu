@@ -52,6 +52,8 @@ export async function quoteComment(
       url: source.comment.url,
     },
   };
-  manager.addComment(local);
+  if (!manager.addComment(local)) {
+    return;
+  }
   void vscode.window.showInformationMessage('Revu: quoted into a local comment.');
 }

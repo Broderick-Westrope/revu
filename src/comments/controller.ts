@@ -6,6 +6,8 @@ import { renderAll, renderComment } from './export';
 import { LocalComment } from './model';
 import { CommentStore } from './store';
 
+const DETACHED_MESSAGE = 'Revu: check out a branch to leave local comments (HEAD is detached).';
+
 function toVsCodeComment(comment: LocalComment): vscode.Comment {
   return {
     body: new vscode.MarkdownString(comment.text),
@@ -17,6 +19,8 @@ function toVsCodeComment(comment: LocalComment): vscode.Comment {
 export class CommentManager implements vscode.Disposable {
   private readonly controller: vscode.CommentController;
   private readonly threads = new Map<string, vscode.CommentThread>();
+  private readonly storeListener: vscode.Disposable;
+  private renderedBranch: string | undefined;
 
   constructor(private readonly store: CommentStore) {
     this.controller = vscode.comments.createCommentController('revu-local', 'Revu (Local)');
@@ -24,8 +28,21 @@ export class CommentManager implements vscode.Disposable {
       placeHolder: 'Leave a local review comment…',
       prompt: 'Local only — never posted to GitHub',
     };
+    this.setCommentingRanges();
+    this.storeListener = store.onDidChange(() => {
+      if (store.currentBranch !== this.renderedBranch) {
+        this.restore();
+        this.setCommentingRanges();
+      }
+    });
+  }
+
+  private setCommentingRanges(): void {
     this.controller.commentingRangeProvider = {
       provideCommentingRanges: (document) => {
+        if (this.store.currentBranch === undefined) {
+          return [];
+        }
         if (document.uri.scheme !== 'file') {
           return [];
         }
@@ -37,7 +54,16 @@ export class CommentManager implements vscode.Disposable {
     };
   }
 
+  private disposeThreads(): void {
+    for (const thread of new Set(this.threads.values())) {
+      thread.dispose();
+    }
+    this.threads.clear();
+  }
+
   restore(): void {
+    this.disposeThreads();
+    this.renderedBranch = this.store.currentBranch;
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
       return;
@@ -58,11 +84,15 @@ export class CommentManager implements vscode.Disposable {
     }
   }
 
-  addComment(comment: LocalComment): void {
+  addComment(comment: LocalComment): boolean {
+    if (this.store.currentBranch === undefined) {
+      void vscode.window.showWarningMessage(DETACHED_MESSAGE);
+      return false;
+    }
     void this.store.add(comment);
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
-      return;
+      return true;
     }
     const absolutePath = path.join(folder.uri.fsPath, comment.path);
     const range = new vscode.Range(comment.startLine - 1, 0, comment.endLine - 1, 0);
@@ -73,10 +103,15 @@ export class CommentManager implements vscode.Disposable {
     thread.contextValue = 'revuLocal';
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     this.threads.set(comment.id, thread);
+    return true;
   }
 
   async createComment(reply: vscode.CommentReply): Promise<void> {
     const thread = reply.thread;
+    if (this.store.currentBranch === undefined) {
+      void vscode.window.showWarningMessage(DETACHED_MESSAGE);
+      return;
+    }
     const document = await vscode.workspace.openTextDocument(thread.uri);
     const range = thread.range ?? new vscode.Range(0, 0, 0, 0);
     const startLine = range.start.line;
@@ -121,10 +156,7 @@ export class CommentManager implements vscode.Disposable {
       return;
     }
     await this.store.clear();
-    for (const thread of this.threads.values()) {
-      thread.dispose();
-    }
-    this.threads.clear();
+    this.disposeThreads();
   }
 
   commentsForThread(thread: vscode.CommentThread): LocalComment[] {
@@ -135,6 +167,7 @@ export class CommentManager implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.storeListener.dispose();
     this.controller.dispose();
   }
 }

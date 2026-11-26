@@ -21,6 +21,10 @@ export class CommentStore {
     this.emitter.fire();
   }
 
+  get currentBranch(): string | undefined {
+    return this.branch;
+  }
+
   all(): LocalComment[] {
     const key = this.key();
     return key ? this.memento.get<LocalComment[]>(key, []) : [];
