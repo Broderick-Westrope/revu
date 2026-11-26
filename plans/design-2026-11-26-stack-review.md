@@ -1,5 +1,7 @@
 # Stack Review Design Doc
 
+> **Status:** COMPLETED (shipped 26 Nov 2026). Written before the build, so "today", "existing" and file references describe the code as it was then. Criteria left unticked were built and unit-tested but not yet tried in a running window.
+
 **TL;DR:** Revu stops asking for a review scope and instead always reviews the checked-out branch against its parent: the branch below it in a stack, or `origin/<default>`. A new Stack view shows where the branch sits among local branches and worktrees and switches between them, and a new Changes view shows the branch-vs-parent diff with a toggle that narrows it to changes since the checkpoint. The guide feature is removed.
 
 **Problem:** Reviewing agent-written branches in Revu is noisy and manual in four ways.
@@ -133,23 +135,23 @@ Selecting a row does nothing beyond selection, because switching can reload the 
 - Removing the guide deletes a working feature. If guides are missed, they come back as an action on the Changes view rather than a scope.
 
 **Success Criteria:**
-- [ ] On a branch cut from a newer `origin/main` than the local `main`, the Changes view lists only the branch's own files.
-- [ ] Pull Default Branch fast-forwards a clean root worktree; with a dirty root it reports why it didn't and the Changes view is still correct.
-- [ ] Right after `wtp add -b b --stay a` (`a` a feature branch), `b` shows `vs a (inferred)` with no files and sits under `a` in the Stack view. After commits on `b` and then on `a`, `b` still shows `vs a` with only its own changes, and `a` still shows `vs main` with all of its own.
-- [ ] With `a` cut from main, `b` created from `HEAD` in `a`'s worktree, `d` created from `HEAD` in `b`'s worktree, and commits on all three, `b` shows `vs a` and `d` shows `vs b`.
-- [ ] Two overrides pointing at each other show a cycle warning and fall back to trunk without hanging.
-- [ ] For a gh stack `main <- a <- b`, the parent of `b` is `a` (gh stack); once `a` is merged, `b`'s parent is trunk; the Stack view shows `main`, `a`, `b` in order with PR state where PRs exist.
-- [ ] Compare With… writes `branch.<name>.revuParent` and the Changes view switches to that parent; Reset Parent restores the resolved one; deleting the override's branch shows "override target missing".
-- [ ] Merge Parent with new parent commits merges them; with a conflict it stops with the merge in progress, opens Source Control, and the conflicted files show in the Changes view; with tracked uncommitted changes it refuses and changes nothing; on a gh-stack layer it isn't offered.
-- [ ] After Merge Parent with the checkpoint one commit behind `HEAD`, checkpoint mode lists that commit's files and none that only the parent changed.
-- [ ] A merge commit's row in the Checkpoint view lists only files where the merge differs from the automatic merge of its parents, including for a merge whose automatic merge conflicted.
+- [x] On a branch cut from a newer `origin/main` than the local `main`, the Changes view lists only the branch's own files.
+- [x] Pull Default Branch fast-forwards a clean root worktree; with a dirty root it reports why it didn't and the Changes view is still correct.
+- [x] Right after `wtp add -b b --stay a` (`a` a feature branch), `b` shows `vs a (inferred)` with no files and sits under `a` in the Stack view. After commits on `b` and then on `a`, `b` still shows `vs a` with only its own changes, and `a` still shows `vs main` with all of its own.
+- [x] With `a` cut from main, `b` created from `HEAD` in `a`'s worktree, `d` created from `HEAD` in `b`'s worktree, and commits on all three, `b` shows `vs a` and `d` shows `vs b`.
+- [x] Two overrides pointing at each other show a cycle warning and fall back to trunk without hanging.
+- [x] For a gh stack `main <- a <- b`, the parent of `b` is `a` (gh stack); once `a` is merged, `b`'s parent is trunk; the Stack view shows `main`, `a`, `b` in order with PR state where PRs exist.
+- [x] Compare With… writes `branch.<name>.revuParent` and the Changes view switches to that parent; Reset Parent restores the resolved one; deleting the override's branch shows "override target missing".
+- [x] Merge Parent with new parent commits merges them; with a conflict it stops with the merge in progress, opens Source Control, and the conflicted files show in the Changes view; with tracked uncommitted changes it refuses and changes nothing; on a gh-stack layer it isn't offered.
+- [x] After Merge Parent with the checkpoint one commit behind `HEAD`, checkpoint mode lists that commit's files and none that only the parent changed.
+- [x] A merge commit's row in the Checkpoint view lists only files where the merge differs from the automatic merge of its parents, including for a merge whose automatic merge conflicted.
 - [ ] Switch on a layer checked out in another worktree opens that folder in the current window; Open in New Window keeps the current one; clicking a row alone never switches.
-- [ ] Switch on another layer of the same gh stack with no worktree switches to it when nothing is uncommitted or unsaved (untracked files allowed), and otherwise offers Create Worktree and never switches; Switch on any other branch with no worktree creates one with `wtp` and opens it.
-- [ ] A commit made on the parent from another worktree shows in the Stack view's behind count after the window regains focus, and refocusing with nothing changed runs no git commands beyond the change check.
-- [ ] Toggling checkpoint mode after marking a commit safe lists only files changed after it; with no checkpoint both modes list the same files.
+- [x] Switch on another layer of the same gh stack with no worktree switches to it when nothing is uncommitted or unsaved (untracked files allowed), and otherwise offers Create Worktree and never switches; Switch on any other branch with no worktree creates one with `wtp` and opens it.
+- [x] A commit made on the parent from another worktree shows in the Stack view's behind count after the window regains focus, and refocusing with nothing changed runs no git commands beyond the change check.
+- [x] Toggling checkpoint mode after marking a commit safe lists only files changed after it; with no checkpoint both modes list the same files.
 - [ ] Comments left on branch `a` aren't shown or exported after switching in place to `b`, and reappear after switching back.
 - [ ] Switching branches re-renders PR threads for the new branch's PR, or clears them when it has none.
-- [ ] No guide, Start Review or End Review command remains, and the read-only guard test fails if `git push` or a writing `gh stack` subcommand appears in `src` but passes with Revu's own `git merge`.
+- [x] No guide, Start Review or End Review command remains, and the read-only guard test fails if `git push` or a writing `gh stack` subcommand appears in `src` but passes with Revu's own `git merge`.
 
 **Context Files:**
 - `src/git.ts`: `defaultBranch`, `mergeBase`, `parseNameStatus` and `hasUncommittedChanges`, all of which change.

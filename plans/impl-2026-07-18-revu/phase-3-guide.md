@@ -1,6 +1,6 @@
 # Phase 3: Guided Review — Agent CLI, Guide Tree, Caching
 
-> **Status:** COMPLETED
+> **Status:** COMPLETED. Superseded: the guide was removed by `plans/design-2026-11-26-stack-review.md`.
 > Part of `plans/impl-2026-07-18-revu/README.md` — depends on Phase 1. Parallel with Phase 2.
 
 ## Specification

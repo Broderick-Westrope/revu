@@ -1,5 +1,7 @@
 # Code Review VS Code Extension Design Spec
 
+> **Status:** COMPLETED. The guide and the review-scope picker described here were later removed by `plans/design-2026-11-26-stack-review.md`.
+
 **Problem:** The human-assisted parts of an opinionated code review workflow are spread across third-party tools (Linear's guided review, pair-review's local diff review, comment-renderer's local comments + markdown export). Switching between them adds friction. AI-performed review is already solved elsewhere; the gap is the human-in-the-loop tooling, unified inside VS Code/Cursor.
 
 **Goal:** A single VS Code extension (compatible with Cursor) providing two capabilities against the checked-out working copy:

@@ -1,5 +1,7 @@
 # Checkpoint Reviews Design Spec
 
+> **Status:** COMPLETED. The "Since checkpoint" review scope and its guide integration were later replaced by the Changes view's checkpoint mode in `plans/design-2026-11-26-stack-review.md`; the checkpoint ref, the Checkpoint view and its commands remain.
+
 **Problem:** Reviewing AI-generated commits iteratively (agent commits locally, human reviews in the editor) has no good state tracking. Comparing the working tree against a "known safe point" via GitLens is manual and stateless — nothing remembers what has been reviewed, so changes get re-reviewed or missed. Commit diffs are read-only with no quick path to editing the live file when a small manual fix is wanted.
 
 **Goal:** A persistent per-branch "checkpoint" — a movable marker meaning "reviewed up to here" — with a sidebar view of unreviewed commits, one-click advancement, an editable escape hatch from read-only commit diffs, and integration with Revu's existing review scopes so guides and local comments work over the checkpoint range.

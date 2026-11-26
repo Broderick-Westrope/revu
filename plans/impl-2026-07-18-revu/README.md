@@ -1,6 +1,6 @@
 # Revu Implementation Plan
 
-> **Status:** COMPLETED
+> **Status:** COMPLETED. The guide (Phase 3) and the scope picker were later removed by `plans/design-2026-11-26-stack-review.md`.
 
 ## Overview
 

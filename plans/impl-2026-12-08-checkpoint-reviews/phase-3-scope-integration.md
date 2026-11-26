@@ -1,6 +1,6 @@
 # Phase 3: Scope + Guide Integration
 
-> **Status:** COMPLETED
+> **Status:** COMPLETED. Superseded: the checkpoint scope and guide integration were replaced by `plans/design-2026-11-26-stack-review.md`.
 > **Spec:** `plans/design-2026-12-08-checkpoint-reviews.md`
 > **Depends on:** Phase 1, Phase 2 (merged)
 
