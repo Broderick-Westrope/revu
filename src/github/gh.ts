@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import { logWarning } from '../log';
 import { GhReviewThread, PrMetadata } from './model';
 import { GhStackView, PrSummary, StackExternal } from '../stack';
 
@@ -215,13 +216,21 @@ export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
   const [list, current, ghStack] = await Promise.all([
     gh(cwd, ['pr', 'list', '--state', 'all', '--limit', '200', '--json', PR_FIELDS])
       .then(parsePrList)
-      .catch(() => [] as PrSummary[]),
+      .catch((err: Error) => {
+        logWarning(`gh pr list failed: ${err.message}`);
+        return [] as PrSummary[];
+      }),
     gh(cwd, ['pr', 'view', '--json', PR_FIELDS])
       .then((out) => parsePrList(`[${out}]`))
       .catch(() => [] as PrSummary[]),
     gh(cwd, ['stack', 'view', '--json'])
       .then(parseGhStackView)
-      .catch(() => undefined),
+      .catch((err: { code?: number; message?: string }) => {
+        if (err.code !== 2) {
+          logWarning(`gh stack view failed: ${err.message ?? String(err)}`);
+        }
+        return undefined;
+      }),
   ]);
   const prs = [...current, ...list.filter((pr) => !current.some((c) => c.number === pr.number))];
   return { prs, ghStack };
