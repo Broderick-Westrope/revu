@@ -241,3 +241,22 @@ suite('review state two-phase refresh', () => {
     fs.rmSync(repo, { recursive: true, force: true });
   });
 });
+
+suite('review state PR data', () => {
+  test('a failed PR fetch keeps the last good PR list', async () => {
+    const repo = await makeStack();
+    await commitFile(repo, 'first.txt');
+    let calls = 0;
+    const state = new ReviewState(repo, async () => {
+      calls++;
+      return calls === 1
+        ? { prs: [{ number: 4, url: 'u', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] }
+        : { prs: [], prsFailed: true };
+    });
+    await state.refresh();
+    await state.refresh();
+
+    assert.strictEqual(state.snapshot?.stack.current?.pr?.number, 4);
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+});

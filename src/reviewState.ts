@@ -19,6 +19,8 @@ export class ReviewState {
   private current: ReviewSnapshot | undefined;
   private lastFingerprint: string | undefined;
   private lastError: string | undefined;
+  private generation = 0;
+  private externalFetch: Promise<StackExternal> | undefined;
 
   readonly onDidChange: vscode.Event<void> = this.emitter.event;
 
@@ -38,21 +40,35 @@ export class ReviewState {
   async refresh(options: { external?: boolean } = {}): Promise<void> {
     await this.resolve();
     if (options.external ?? true) {
-      this.external = await this.fetchExternal(this.repoRoot).catch(() => ({ prs: [] }));
+      this.externalFetch ??= this.fetchExternal(this.repoRoot)
+        .catch((): StackExternal => ({ prs: [], prsFailed: true }))
+        .finally(() => {
+          this.externalFetch = undefined;
+        });
+      const next = await this.externalFetch;
+      this.external = next.prsFailed ? { ...next, prs: this.external.prs } : next;
       await this.resolve();
     }
   }
 
   private async resolve(): Promise<void> {
+    const generation = ++this.generation;
+    let next: ReviewSnapshot | undefined;
+    let error: string | undefined;
+    let fingerprint: string | undefined;
     try {
-      this.lastFingerprint = await this.fingerprint();
+      fingerprint = await this.fingerprint();
       const stack = await resolveStack(this.repoRoot, this.external);
-      this.current = { stack, checkpointMode: this.checkpointMode, ...(await this.base(stack)) };
-      this.lastError = undefined;
+      next = { stack, checkpointMode: this.checkpointMode, ...(await this.base(stack)) };
     } catch (err) {
-      this.current = undefined;
-      this.lastError = (err as Error).message;
+      error = (err as Error).message;
     }
+    if (generation !== this.generation) {
+      return;
+    }
+    this.lastFingerprint = fingerprint;
+    this.current = next;
+    this.lastError = error;
     this.emitter.fire();
   }
 

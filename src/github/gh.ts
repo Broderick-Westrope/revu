@@ -34,9 +34,10 @@ export function resetGhAvailability(): void {
   ghAvailable = undefined;
 }
 
-export async function fetchPrMetadata(cwd: string): Promise<PrMetadata | undefined> {
+export async function fetchPrMetadata(cwd: string, branch?: string): Promise<PrMetadata | undefined> {
   try {
-    const output = await gh(cwd, ['pr', 'view', '--json', 'number,title,body,baseRefName,url']);
+    const target = branch ? [branch] : [];
+    const output = await gh(cwd, ['pr', 'view', ...target, '--json', 'number,title,body,baseRefName,url']);
     return JSON.parse(output) as PrMetadata;
   } catch {
     return undefined;
@@ -209,29 +210,41 @@ export function parsePrList(json: string): PrSummary[] {
 
 const PR_FIELDS = 'number,url,state,headRefName,baseRefName';
 
+let loggedAuthFailure = false;
+
+function fetchGhStack(cwd: string): Promise<GhStackView | undefined> {
+  return gh(cwd, ['stack', 'view', '--json'])
+    .then(parseGhStackView)
+    .catch((err: { code?: number; message?: string }) => {
+      if (err.code !== 2 && err.code !== 6) {
+        logWarning(`gh stack view failed: ${err.message ?? String(err)}`);
+      }
+      return undefined;
+    });
+}
+
 export async function fetchStackExternal(cwd: string): Promise<StackExternal> {
+  const ghStack = fetchGhStack(cwd);
   if (!(await isGhAvailable(cwd))) {
-    return { prs: [] };
+    if (!loggedAuthFailure) {
+      loggedAuthFailure = true;
+      logWarning('gh auth status failed, so PR data is unavailable. Run `gh auth status` to see why.');
+    }
+    return { prs: [], prsFailed: true, ghStack: await ghStack };
   }
-  const [list, current, ghStack] = await Promise.all([
+  let prsFailed = false;
+  const [list, current] = await Promise.all([
     gh(cwd, ['pr', 'list', '--state', 'all', '--limit', '200', '--json', PR_FIELDS])
       .then(parsePrList)
       .catch((err: Error) => {
+        prsFailed = true;
         logWarning(`gh pr list failed: ${err.message}`);
         return [] as PrSummary[];
       }),
     gh(cwd, ['pr', 'view', '--json', PR_FIELDS])
       .then((out) => parsePrList(`[${out}]`))
       .catch(() => [] as PrSummary[]),
-    gh(cwd, ['stack', 'view', '--json'])
-      .then(parseGhStackView)
-      .catch((err: { code?: number; message?: string }) => {
-        if (err.code !== 2 && err.code !== 6) {
-          logWarning(`gh stack view failed: ${err.message ?? String(err)}`);
-        }
-        return undefined;
-      }),
   ]);
   const prs = [...current, ...list.filter((pr) => !current.some((c) => c.number === pr.number))];
-  return { prs, ghStack };
+  return { prs, prsFailed, ghStack: await ghStack };
 }
