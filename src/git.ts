@@ -15,11 +15,13 @@ export interface CommitInfo {
   parents: string[];
 }
 
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+
 export const EMPTY_REF_SHA = '0000000000000000000000000000000000000000';
 
 export function git(cwd: string, args: string[], okCodes: number[] = []): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024, env: GIT_ENV }, (err, stdout) => {
       if (err && !okCodes.includes((err as { code?: number }).code ?? -1)) {
         reject(err);
       } else {
