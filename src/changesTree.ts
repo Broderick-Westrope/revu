@@ -106,7 +106,7 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
       return element.kind === 'folder' ? element.children : [];
     }
     if (this.state.error) {
-      this.setMessage?.(`Revu could not read this branch: ${this.state.error}`);
+      this.setMessage?.(`Could not read this branch: ${this.state.error}`);
       this.setDescription?.(undefined);
       return [];
     }
@@ -130,11 +130,13 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
     try {
       files = await this.state.files();
     } catch (err) {
-      this.setMessage?.(`Revu could not list changes: ${(err as Error).message}`);
+      this.setMessage?.(`Could not list changes: ${(err as Error).message}`);
       return [];
     }
     if (files.length === 0) {
-      this.setMessage?.(`No changes against ${current.parent}.`);
+      this.setMessage?.(
+        snapshot.checkpointMode ? 'No changes since the checkpoint.' : `No changes against ${current.parent}.`
+      );
     }
     return buildTree(files, snapshot.base, this.state.repoRoot);
   }

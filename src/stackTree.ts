@@ -32,6 +32,10 @@ export class StackTreeProvider implements vscode.TreeDataProvider<StackNode> {
     if (element) {
       return element.children;
     }
+    if (this.state.error) {
+      this.setMessage?.(`Could not read this branch: ${this.state.error}`);
+      return [];
+    }
     const snapshot = this.state.snapshot;
     if (!snapshot?.stack.current) {
       this.setMessage?.(snapshot ? 'HEAD is detached. Check out a branch to see its stack.' : undefined);

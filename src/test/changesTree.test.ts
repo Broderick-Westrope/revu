@@ -119,6 +119,18 @@ suite('changes tree provider', () => {
     assert.strictEqual(captured.description, 'vs a (inferred) · since checkpoint');
   });
 
+  test('checkpoint mode with nothing since the checkpoint says so', async () => {
+    const repo = await makeStack();
+    const first = await commitFile(repo, 'first.txt');
+    await markSafe(repo, 'b', first);
+    const { provider, state, captured } = await setup(repo);
+    state.setCheckpointMode(true);
+    await state.refresh();
+
+    assert.deepStrictEqual(await provider.getChildren(), []);
+    assert.strictEqual(captured.message, 'No changes since the checkpoint.');
+  });
+
   test('checkpoint mode without a checkpoint lists the same files', async () => {
     const repo = await makeStack();
     await commitFile(repo, 'first.txt');
@@ -221,7 +233,7 @@ suite('review state errors', () => {
     assert.ok(state.error);
     assert.strictEqual(state.branch, 'unrelated');
     assert.deepStrictEqual(await provider.getChildren(), []);
-    assert.ok(captured.message?.startsWith('Revu could not read this branch:'));
+    assert.ok(captured.message?.startsWith('Could not read this branch:'));
   });
 });
 

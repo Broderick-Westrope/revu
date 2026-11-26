@@ -125,6 +125,16 @@ suite('stack tree provider', () => {
     assert.strictEqual((await item(provider, 'a')).description, '↑1 ↓0');
   });
 
+  test('a failed refresh shows the error instead of an empty view', async () => {
+    const repo = await makeRepo();
+    await git(repo, ['checkout', '-q', '--orphan', 'unrelated']);
+    await commitFile(repo, 'other.txt');
+    const { provider, messages } = await setup(repo);
+
+    assert.deepStrictEqual(await provider.getChildren(), []);
+    assert.ok(messages.pop()?.startsWith('Could not read this branch:'));
+  });
+
   test('a detached HEAD shows a message and no rows', async () => {
     const repo = await makeRepo();
     await git(repo, ['checkout', '-q', '--detach']);
