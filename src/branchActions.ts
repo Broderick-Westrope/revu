@@ -31,3 +31,17 @@ export async function listWorktrees(cwd: string): Promise<Worktrees> {
   }
   return { main, byBranch };
 }
+
+export async function hasTrackedChanges(cwd: string): Promise<boolean> {
+  return (await git(cwd, ['status', '--porcelain', '--untracked-files=no'])).trim().length > 0;
+}
+
+export async function aheadBehind(
+  cwd: string,
+  parentRef: string,
+  branch: string
+): Promise<{ ahead: number; behind: number }> {
+  const output = await git(cwd, ['rev-list', '--left-right', '--count', `${parentRef}...${branch}`]);
+  const [behind, ahead] = output.trim().split(/\s+/).map(Number);
+  return { ahead, behind };
+}

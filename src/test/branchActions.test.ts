@@ -3,7 +3,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { listWorktrees } from '../branchActions';
+import { aheadBehind, hasTrackedChanges, listWorktrees } from '../branchActions';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -66,5 +66,25 @@ suite('branch actions', () => {
       ['main', repo],
       ['a', other],
     ]);
+  });
+
+  test('hasTrackedChanges ignores untracked files and sees tracked edits', async () => {
+    const repo = await localRepo();
+    fs.writeFileSync(path.join(repo, 'scratch.txt'), 'scratch\n');
+    assert.strictEqual(await hasTrackedChanges(repo), false);
+
+    fs.writeFileSync(path.join(repo, 'base.txt'), 'edited\n');
+    assert.strictEqual(await hasTrackedChanges(repo), true);
+  });
+
+  test('aheadBehind counts commits on each side of the parent', async () => {
+    const repo = await localRepo();
+    await git(repo, ['checkout', '-q', '-b', 'a']);
+    await commitFile(repo, 'a1.txt');
+    await commitFile(repo, 'a2.txt');
+    await git(repo, ['checkout', '-q', 'main']);
+    await commitFile(repo, 'm1.txt');
+
+    assert.deepStrictEqual(await aheadBehind(repo, 'main', 'a'), { ahead: 2, behind: 1 });
   });
 });
