@@ -176,6 +176,27 @@ suite('branch actions', () => {
       assert.deepStrictEqual(planSwitch({ ...base, target: 'main', worktrees }), { kind: 'switch' });
     });
 
+    test('the trunk checked out in a linked worktree opens that worktree', () => {
+      const worktrees = {
+        main: '/root',
+        byBranch: new Map([
+          ['feat', '/root'],
+          ['main', '/wt/main'],
+        ]),
+      };
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'main', worktrees }), {
+        kind: 'openFolder',
+        path: '/wt/main',
+      });
+    });
+
+    test('the trunk checked out nowhere gets its own worktree from a linked worktree', () => {
+      const worktrees = { main: '/root', byBranch: new Map([['a', '/wt/a']]) };
+      assert.deepStrictEqual(planSwitch({ ...base, target: 'main', worktrees }), {
+        kind: 'createWorktree',
+      });
+    });
+
     test('a branch in another worktree opens that folder', () => {
       assert.deepStrictEqual(planSwitch({ ...base, target: 'c', dirty: true }), {
         kind: 'openFolder',

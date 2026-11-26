@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { Worktrees, aheadBehind } from './git';
 import { logWarningOnce } from './log';
 import { ReviewState } from './reviewState';
-import { BranchResolution, StackResult } from './stack';
+import { BranchResolution, CurrentResolution, StackResult } from './stack';
 
 export interface StackNode {
   branch: string;
@@ -44,7 +44,7 @@ export class StackTreeProvider implements vscode.TreeDataProvider<StackNode> {
     }
     this.setMessage?.(undefined);
     const repoRoot = this.state.repoRoot;
-    const root = buildStackTree(snapshot.stack, snapshot.stack.worktrees, repoRoot);
+    const root = buildStackTree(snapshot.stack, snapshot.stack.current, snapshot.stack.worktrees, repoRoot);
     await Promise.all(
       flatten(root).map(async (node) => {
         if (node.isTrunk || !node.isLocal || !node.resolution) {
@@ -89,8 +89,12 @@ export class StackTreeProvider implements vscode.TreeDataProvider<StackNode> {
   }
 }
 
-function buildStackTree(stack: StackResult, worktrees: Worktrees, currentWorktree: string): StackNode {
-  const current = stack.current as BranchResolution & { onTrunk: boolean };
+function buildStackTree(
+  stack: StackResult,
+  current: CurrentResolution,
+  worktrees: Worktrees,
+  currentWorktree: string
+): StackNode {
   const trunk = stack.trunk.name;
   const resolutionOf = (branch: string): BranchResolution | undefined =>
     branch === current.branch ? current : stack.branches.get(branch);
@@ -112,7 +116,8 @@ function buildStackTree(stack: StackResult, worktrees: Worktrees, currentWorktre
     isTrunk: true,
     isCurrent: current.onTrunk,
     isLocal: true,
-    worktree: worktrees.main !== currentWorktree ? worktrees.main : undefined,
+    worktree:
+      worktrees.byBranch.get(trunk) !== currentWorktree ? worktrees.byBranch.get(trunk) : undefined,
     children: [],
   };
   if (current.onTrunk) {

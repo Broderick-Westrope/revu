@@ -32,15 +32,12 @@ export function planSwitch(input: SwitchInput): SwitchPlan {
   if (input.target === input.current) {
     return { kind: 'none' };
   }
-  if (input.target === input.trunk) {
-    if (input.worktrees.main !== input.currentWorktree) {
-      return { kind: 'openFolder', path: input.worktrees.main };
-    }
-    return input.dirty ? { kind: 'refuseDirty' } : { kind: 'switch' };
-  }
   const elsewhere = input.worktrees.byBranch.get(input.target);
   if (elsewhere !== undefined && elsewhere !== input.currentWorktree) {
     return { kind: 'openFolder', path: elsewhere };
+  }
+  if (input.target === input.trunk && input.worktrees.main === input.currentWorktree) {
+    return input.dirty ? { kind: 'refuseDirty' } : { kind: 'switch' };
   }
   if (!input.sameGhStack) {
     return { kind: 'createWorktree' };
