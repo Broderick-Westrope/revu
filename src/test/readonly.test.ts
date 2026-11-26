@@ -32,9 +32,9 @@ const FORBIDDEN: { name: string; pattern: RegExp }[] = [
   { name: 'GraphQL mutation', pattern: /\bmutation\b/i },
   { name: 'git push invocation', pattern: /\bgit\s+push\b|['"]push['"]/ },
   {
-    name: 'gh stack write invocation',
+    name: 'gh stack invocation other than view',
     pattern:
-      /\bstack\s+(?:push|submit|sync|merge|rebase|link)\b|['"]stack['"],\s*['"](?:push|submit|sync|merge|rebase|link)['"]/,
+      /\bgh\s+stack\s+(?:push|submit|sync|merge|rebase|link|init|add|checkout|unstack|modify|up|down|top|bottom|switch|trunk)\b|['"]stack['"],\s*['"](?!view['"])/,
   },
 ];
 
@@ -55,12 +55,12 @@ suite('read-only GitHub guard', () => {
     assert.deepStrictEqual(violations, []);
   });
 
-  test('patterns catch git push and writing gh stack subcommands', () => {
+  test('patterns catch git push and every gh stack subcommand but view', () => {
     const samples = [
       "exec('git push origin main')",
       "git(root, ['push', 'origin', 'main'])",
       "execFile('git', ['push'])",
-      ...['push', 'submit', 'sync', 'merge', 'rebase', 'link'].flatMap((sub) => [
+      ...['push', 'submit', 'sync', 'merge', 'rebase', 'link', 'init', 'add', 'checkout', 'unstack'].flatMap((sub) => [
         `exec('gh stack ${sub}')`,
         `gh(cwd, ['stack', '${sub}'])`,
       ]),
