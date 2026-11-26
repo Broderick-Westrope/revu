@@ -3,7 +3,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { getCheckpointState } from './checkpoint';
 import { ChangedFile, changedFiles, checkedOutBranch, git } from './git';
-import { StackExternal, StackResult, resolveStack } from './stack';
+import { StackExternal } from './github/model';
+import { StackResult, resolveStack } from './stack';
 
 export interface ReviewSnapshot {
   stack: StackResult;
@@ -35,8 +36,9 @@ export class ReviewState {
     return this.current;
   }
 
-  setCheckpointMode(on: boolean): void {
+  async setCheckpointMode(on: boolean): Promise<void> {
     this.checkpointMode = on;
+    await this.refresh();
   }
 
   get prsKnown(): boolean {
@@ -150,8 +152,10 @@ export class ReviewState {
     let config = '';
     try {
       config = fs.readFileSync(path.join(configPath.trim(), 'config'), 'utf8');
-    } catch {
-      config = '';
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw err;
+      }
     }
     return `${head}\n${refs}\n${status}\n${config}`;
   }

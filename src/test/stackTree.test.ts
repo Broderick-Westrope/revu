@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ReviewState } from '../reviewState';
-import { StackExternal } from '../stack';
+import { StackExternal } from '../github/model';
 import { StackNode, StackTreeProvider } from '../stackTree';
 
 function git(cwd: string, args: string[]): Promise<string> {

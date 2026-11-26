@@ -12,8 +12,6 @@ import {
 } from './git';
 import { PrSummary, StackExternal } from './github/model';
 
-export { StackExternal };
-
 export type ParentSource = 'override' | 'gh-stack' | 'pr' | 'inferred' | 'trunk';
 
 export interface BranchResolution {
@@ -64,7 +62,7 @@ interface BranchGraph {
 }
 
 const OVERRIDE_SUFFIX = 'revuParent';
-const OVERRIDE_KEY = /^branch\.(.+)\.revuparent$/;
+const OVERRIDE_KEY = new RegExp(`^branch\\.(.+)\\.${OVERRIDE_SUFFIX.toLowerCase()}$`);
 const CREATED_FROM = /^branch: Created from (.+)$/;
 
 async function loadGraph(repoRoot: string, external: StackExternal): Promise<BranchGraph> {
@@ -137,7 +135,7 @@ async function loadGraph(repoRoot: string, external: StackExternal): Promise<Bra
   const overrides = new Map<string, string>();
   const configOutput = await git(
     repoRoot,
-    ['config', '--get-regexp', '^branch\\..*\\.revuparent$'],
+    ['config', '--get-regexp', `^branch\\..*\\.${OVERRIDE_SUFFIX.toLowerCase()}$`],
     [1]
   );
   for (const line of configOutput.split('\n')) {
@@ -460,22 +458,20 @@ async function diffBaseFor(
 
 async function withStackBase(
   repoRoot: string,
-  mergeBase: string,
+  parentBase: string,
   stackBase: string | undefined
 ): Promise<string> {
+  const usable = async (ancestor: string, descendant: string): Promise<boolean> =>
+    isAncestor(repoRoot, ancestor, descendant).catch(() => false);
   if (
     stackBase &&
-    stackBase !== mergeBase &&
-    (await isAncestorOrFalse(repoRoot, stackBase, 'HEAD')) &&
-    (await isAncestorOrFalse(repoRoot, mergeBase, stackBase))
+    stackBase !== parentBase &&
+    (await usable(stackBase, 'HEAD')) &&
+    (await usable(parentBase, stackBase))
   ) {
     return stackBase;
   }
-  return mergeBase;
-}
-
-async function isAncestorOrFalse(repoRoot: string, ancestor: string, descendant: string): Promise<boolean> {
-  return isAncestor(repoRoot, ancestor, descendant).catch(() => false);
+  return parentBase;
 }
 
 export function descendantsOf(stack: StackResult, branch: string): Set<string> {

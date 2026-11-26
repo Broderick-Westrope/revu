@@ -3,7 +3,8 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { StackExternal, descendantsOf, resolveStack } from '../stack';
+import { StackExternal } from '../github/model';
+import { descendantsOf, resolveStack } from '../stack';
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
