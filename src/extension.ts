@@ -17,6 +17,15 @@ import {
   openWorkingTreeFileDiff,
 } from './commands/checkpointDiff';
 import { showDiff } from './commands/openDiff';
+import {
+  compareWithCommand,
+  mergeParentCommand,
+  openBranchInNewWindowCommand,
+  openPrCommand,
+  pullDefaultBranchCommand,
+  resetParentCommand,
+  switchToBranchCommand,
+} from './commands/stack';
 import { refreshPrThreads } from './commands/prThreads';
 import { quoteComment } from './commands/quoteComment';
 import { registerComments } from './comments/controller';
@@ -27,6 +36,7 @@ import { registerGitWatcher } from './gitWatcher';
 import { fetchStackExternal } from './github/gh';
 import { GithubThreadRenderer } from './github/threadRenderer';
 import { ReviewState } from './reviewState';
+import { StackNode, registerStackTree } from './stackTree';
 
 let checkpointProvider: CheckpointTreeProvider | undefined;
 let reviewState: ReviewState | undefined;
@@ -34,6 +44,17 @@ let reviewState: ReviewState | undefined;
 function refreshAfterCheckpointChange(): void {
   checkpointProvider?.refresh();
   void reviewState?.refresh({ external: false });
+}
+
+async function refreshAfterAction(options: { external?: boolean } = {}): Promise<void> {
+  checkpointProvider?.refresh();
+  await reviewState?.refresh({ external: options.external ?? false });
+}
+
+function withState(
+  action: (state: ReviewState) => Promise<void>
+): () => Promise<void> | undefined {
+  return () => (reviewState ? action(reviewState) : undefined);
 }
 
 async function setCheckpointMode(on: boolean): Promise<void> {
@@ -63,6 +84,27 @@ export function activate(context: vscode.ExtensionContext): void {
         : undefined
     ),
     vscode.commands.registerCommand('revu.refreshStack', () => reviewState?.refresh()),
+    vscode.commands.registerCommand('revu.switchToBranch', (node: StackNode) =>
+      reviewState ? switchToBranchCommand(reviewState, node, refreshAfterAction) : undefined
+    ),
+    vscode.commands.registerCommand('revu.openBranchInNewWindow', openBranchInNewWindowCommand),
+    vscode.commands.registerCommand('revu.openPr', openPrCommand),
+    vscode.commands.registerCommand(
+      'revu.pullDefaultBranch',
+      withState((state) => pullDefaultBranchCommand(state, refreshAfterAction))
+    ),
+    vscode.commands.registerCommand(
+      'revu.mergeParent',
+      withState((state) => mergeParentCommand(state, refreshAfterAction))
+    ),
+    vscode.commands.registerCommand(
+      'revu.compareWith',
+      withState((state) => compareWithCommand(state, refreshAfterAction))
+    ),
+    vscode.commands.registerCommand(
+      'revu.resetParent',
+      withState((state) => resetParentCommand(state, refreshAfterAction))
+    ),
     vscode.commands.registerCommand('revu.showSinceCheckpoint', () => setCheckpointMode(true)),
     vscode.commands.registerCommand('revu.showAllChanges', () => setCheckpointMode(false)),
     vscode.commands.registerCommand('revu.openChangesFile', (node: ChangesFileNode) =>
@@ -106,12 +148,28 @@ export function activate(context: vscode.ExtensionContext): void {
     const state = new ReviewState(root, fetchStackExternal);
     reviewState = state;
     context.subscriptions.push(state);
+    registerStackTree(context, state);
     registerChangesTree(context, state);
+    registerStackContext(context, state);
     checkpointProvider = registerCheckpointTree(context, root, gitStateEvent);
     registerCheckpointGuard(context, root, gitStateEvent);
     registerReviewRefresh(context, state, gitStateEvent, renderer);
     await state.refresh();
   })();
+}
+
+function registerStackContext(context: vscode.ExtensionContext, state: ReviewState): void {
+  context.subscriptions.push(
+    state.onDidChange(() => {
+      const current = state.snapshot?.stack.current;
+      const onFeatureBranch = current !== undefined && !current.onTrunk;
+      const hasOverride =
+        current?.source === 'override' || current?.warning === 'override target missing';
+      void vscode.commands.executeCommand('setContext', 'revu.onFeatureBranch', onFeatureBranch);
+      void vscode.commands.executeCommand('setContext', 'revu.inGhStack', current?.inGhStack === true);
+      void vscode.commands.executeCommand('setContext', 'revu.hasParentOverride', hasOverride);
+    })
+  );
 }
 
 function registerReviewRefresh(

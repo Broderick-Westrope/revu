@@ -95,6 +95,39 @@
       {
         "command": "revu.openChangesFile",
         "title": "Open Diff"
+      },
+      {
+        "command": "revu.switchToBranch",
+        "title": "Switch",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "revu.openBranchInNewWindow",
+        "title": "Open in New Window",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "revu.openPr",
+        "title": "Open PR",
+        "icon": "$(github)"
+      },
+      {
+        "command": "revu.pullDefaultBranch",
+        "title": "Revu: Pull Default Branch",
+        "icon": "$(repo-pull)"
+      },
+      {
+        "command": "revu.mergeParent",
+        "title": "Revu: Merge Parent",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "revu.compareWith",
+        "title": "Revu: Compare With…"
+      },
+      {
+        "command": "revu.resetParent",
+        "title": "Revu: Reset Parent"
       }
     ],
     "viewsContainers": {
@@ -109,6 +142,10 @@
     "views": {
       "revu": [
         {
+          "id": "revu.stackView",
+          "name": "Stack"
+        },
+        {
           "id": "revu.changesView",
           "name": "Changes"
         },
@@ -119,6 +156,11 @@
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "revu.stackView",
+        "contents": "Open a git repository to see its stack.",
+        "when": "!revu.isGitRepo"
+      },
       {
         "view": "revu.changesView",
         "contents": "Open a git repository to review its branch.",
@@ -132,6 +174,21 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "revu.pullDefaultBranch",
+          "group": "navigation@1",
+          "when": "view == revu.stackView"
+        },
+        {
+          "command": "revu.mergeParent",
+          "group": "navigation@2",
+          "when": "view == revu.stackView && revu.onFeatureBranch && !revu.inGhStack"
+        },
+        {
+          "command": "revu.refreshStack",
+          "group": "navigation@3",
+          "when": "view == revu.stackView"
+        },
         {
           "command": "revu.showSinceCheckpoint",
           "group": "navigation",
@@ -151,9 +208,34 @@
           "command": "revu.refreshCheckpoint",
           "group": "navigation",
           "when": "view == revu.checkpointView"
+        },
+        {
+          "command": "revu.compareWith",
+          "group": "1_parent@1",
+          "when": "view == revu.changesView && revu.onFeatureBranch"
+        },
+        {
+          "command": "revu.resetParent",
+          "group": "1_parent@2",
+          "when": "view == revu.changesView && revu.hasParentOverride"
         }
       ],
       "view/item/context": [
+        {
+          "command": "revu.switchToBranch",
+          "group": "inline@1",
+          "when": "view == revu.stackView && viewItem =~ /;switch\\b/"
+        },
+        {
+          "command": "revu.openBranchInNewWindow",
+          "group": "inline@2",
+          "when": "view == revu.stackView && viewItem =~ /;worktree\\b/"
+        },
+        {
+          "command": "revu.openPr",
+          "group": "inline@3",
+          "when": "view == revu.stackView && viewItem =~ /;pr\\b/"
+        },
         {
           "command": "revu.markSafe",
           "group": "inline",
@@ -204,6 +286,30 @@
         {
           "command": "revu.openChangesFile",
           "when": "false"
+        },
+        {
+          "command": "revu.switchToBranch",
+          "when": "false"
+        },
+        {
+          "command": "revu.openBranchInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "revu.openPr",
+          "when": "false"
+        },
+        {
+          "command": "revu.mergeParent",
+          "when": "revu.onFeatureBranch && !revu.inGhStack"
+        },
+        {
+          "command": "revu.compareWith",
+          "when": "revu.onFeatureBranch"
+        },
+        {
+          "command": "revu.resetParent",
+          "when": "revu.hasParentOverride"
         }
       ],
       "comments/comment/title": [
