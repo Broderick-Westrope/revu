@@ -124,4 +124,3 @@ export async function mergeParent(
   await updateRef(cwd, ref, after, before);
   return { kind: 'merged', checkpointMoved: true };
 }
-

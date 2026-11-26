@@ -107,7 +107,7 @@ export function registerGitWatcher(
     }
     warned = true;
     void vscode.window.showWarningMessage(
-      "Revu: git watcher failed — checkpoint view won't auto-refresh; use the refresh button."
+      'Revu: git watcher failed, so the Revu views only refresh on focus, saves, and the Refresh button.'
     );
   };
   void gitDir(repoRootPath).then(

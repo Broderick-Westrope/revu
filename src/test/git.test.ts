@@ -94,7 +94,6 @@ suite('git wrapper', () => {
     const content = await showFile(repo, 'HEAD', 'modify-me.txt');
     assert.strictEqual(content, 'original content\nline two\nline three\n');
   });
-
 });
 
 suite('git wrapper during a conflicted merge', () => {
