@@ -73,7 +73,9 @@ export async function switchToBranchCommand(
       current: stack.current?.branch,
       currentWorktree: root,
       worktrees: await listWorktrees(root),
-      dirty: await hasTrackedChanges(root),
+      dirty:
+        (await hasTrackedChanges(root)) ||
+        vscode.workspace.textDocuments.some((doc) => doc.isDirty && doc.uri.scheme === 'file'),
     });
     switch (plan.kind) {
       case 'none':
@@ -87,7 +89,7 @@ export async function switchToBranchCommand(
         return;
       case 'offerWorktree': {
         const choice = await vscode.window.showWarningMessage(
-          `Revu: this worktree has tracked changes, so it won't switch to ${node.branch}.`,
+          `Revu: this worktree has uncommitted changes or unsaved files, so it won't switch to ${node.branch}.`,
           'Create Worktree'
         );
         if (choice === 'Create Worktree') {
