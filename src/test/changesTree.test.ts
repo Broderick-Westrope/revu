@@ -214,3 +214,30 @@ suite('review state errors', () => {
     assert.ok(captured.message?.startsWith('Revu could not read this branch:'));
   });
 });
+
+suite('review state two-phase refresh', () => {
+  test('git state is published before slow PR data arrives', async () => {
+    const repo = await makeStack();
+    await commitFile(repo, 'first.txt');
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const state = new ReviewState(repo, async () => {
+      await gate;
+      return { prs: [{ number: 9, url: 'u', state: 'OPEN', headRefName: 'b', baseRefName: 'a' }] };
+    });
+    const firstChange = new Promise<void>((resolve) => state.onDidChange(() => resolve()));
+
+    const done = state.refresh();
+    await firstChange;
+
+    assert.strictEqual(state.snapshot?.stack.current?.branch, 'b');
+    const prNumber = (): number | undefined => state.snapshot?.stack.current?.pr?.number;
+    assert.strictEqual(prNumber(), undefined);
+    release();
+    await done;
+    assert.strictEqual(prNumber(), 9);
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+});

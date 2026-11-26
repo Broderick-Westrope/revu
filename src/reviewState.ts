@@ -36,9 +36,14 @@ export class ReviewState {
   }
 
   async refresh(options: { external?: boolean } = {}): Promise<void> {
+    await this.resolve();
     if (options.external ?? true) {
       this.external = await this.fetchExternal(this.repoRoot).catch(() => ({ prs: [] }));
+      await this.resolve();
     }
+  }
+
+  private async resolve(): Promise<void> {
     try {
       this.lastFingerprint = await this.fingerprint();
       const stack = await resolveStack(this.repoRoot, this.external);

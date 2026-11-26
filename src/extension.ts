@@ -153,13 +153,14 @@ export function activate(context: vscode.ExtensionContext): void {
     registerStackContext(context, state);
     registerCheckpointGuard(context, root, gitStateEvent);
     registerReviewRefresh(context, state, gitStateEvent, renderer, store);
-    await state.refresh();
+    await state.refresh({ external: false });
     registerCheckpointTree(
       context,
       root,
       state.onDidChange,
       () => state.snapshot?.stack.current?.diffBase
     );
+    await state.refresh();
   })();
 }
 
