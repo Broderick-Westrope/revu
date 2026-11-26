@@ -111,3 +111,52 @@ suite('git wrapper', () => {
     fs.unlinkSync(path.join(repo, 'another-untracked.txt'));
   });
 });
+
+suite('git wrapper during a conflicted merge', () => {
+  let repo: string;
+  let base: string;
+
+  suiteSetup(async () => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'revu-git-conflict-test-'));
+    await git(repo, ['init', '-b', 'main']);
+    await git(repo, ['config', 'user.email', 'test@example.com']);
+    await git(repo, ['config', 'user.name', 'Test User']);
+    await git(repo, ['config', 'rerere.enabled', 'false']);
+    fs.writeFileSync(path.join(repo, 'conflict.txt'), 'base\n');
+    fs.writeFileSync(path.join(repo, 'restored.txt'), 'base\n');
+    await git(repo, ['add', '.']);
+    await git(repo, ['commit', '-m', 'base']);
+    base = (await git(repo, ['rev-parse', 'HEAD'])).trim();
+    await git(repo, ['checkout', '-b', 'feature']);
+    fs.writeFileSync(path.join(repo, 'conflict.txt'), 'feature\n');
+    fs.writeFileSync(path.join(repo, 'restored.txt'), 'feature\n');
+    await git(repo, ['commit', '-am', 'feature']);
+    await git(repo, ['checkout', 'main']);
+    fs.writeFileSync(path.join(repo, 'conflict.txt'), 'main\n');
+    fs.writeFileSync(path.join(repo, 'restored.txt'), 'main\n');
+    await git(repo, ['commit', '-am', 'main']);
+    await git(repo, ['checkout', 'feature']);
+    await assert.rejects(git(repo, ['merge', '--no-edit', 'main']));
+    fs.writeFileSync(path.join(repo, 'restored.txt'), 'base\n');
+  });
+
+  suiteTeardown(() => {
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  test('changedFiles marks a conflicted file as a conflict', async () => {
+    const files = await changedFiles(repo, base, true);
+    assert.deepStrictEqual(
+      files.find((f) => f.path === 'conflict.txt'),
+      { path: 'conflict.txt', status: 'X' }
+    );
+  });
+
+  test('changedFiles keeps a conflicted file whose content matches the base', async () => {
+    const files = await changedFiles(repo, base, true);
+    assert.deepStrictEqual(
+      files.find((f) => f.path === 'restored.txt'),
+      { path: 'restored.txt', status: 'X' }
+    );
+  });
+});

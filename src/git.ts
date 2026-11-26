@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 export interface ChangedFile {
   path: string;
   oldPath?: string;
-  status: 'A' | 'M' | 'D' | 'R' | 'U';
+  status: 'A' | 'M' | 'D' | 'R' | 'U' | 'X';
 }
 
 export interface CommitInfo {
@@ -89,6 +89,8 @@ function parseNameStatus(output: string): ChangedFile[] {
       files.push({ oldPath: parts[1], path: parts[2], status: 'R' });
     } else if (rawStatus === 'A' || rawStatus === 'M' || rawStatus === 'D') {
       files.push({ path: parts[1], status: rawStatus });
+    } else if (rawStatus === 'U') {
+      files.push({ path: parts[1], status: 'X' });
     }
   }
   return files;
@@ -101,6 +103,15 @@ export async function changedFiles(
 ): Promise<ChangedFile[]> {
   const output = await git(cwd, ['diff', '--name-status', '-M', baseRef]);
   const files = parseNameStatus(output);
+  const conflicts = parseNameStatus(await git(cwd, ['diff', '--name-status', '--diff-filter=U']));
+  for (const conflict of conflicts) {
+    const existing = files.find((file) => file.path === conflict.path);
+    if (existing) {
+      existing.status = 'X';
+    } else {
+      files.push(conflict);
+    }
+  }
   if (includeUntracked) {
     const untracked = await git(cwd, ['ls-files', '--others', '--exclude-standard']);
     for (const line of untracked.split('\n')) {
