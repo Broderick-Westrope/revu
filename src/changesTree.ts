@@ -96,6 +96,11 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
     if (element) {
       return element.kind === 'folder' ? element.children : [];
     }
+    if (this.state.error) {
+      this.setMessage?.(`Revu could not read this branch: ${this.state.error}`);
+      this.setDescription?.(undefined);
+      return [];
+    }
     const snapshot = this.state.snapshot;
     const current = snapshot?.stack.current;
     if (!snapshot || !current) {

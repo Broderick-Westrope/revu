@@ -18,6 +18,7 @@ export class ReviewState {
   private checkpointMode = false;
   private current: ReviewSnapshot | undefined;
   private lastFingerprint: string | undefined;
+  private lastError: string | undefined;
 
   readonly onDidChange: vscode.Event<void> = this.emitter.event;
 
@@ -38,10 +39,20 @@ export class ReviewState {
     if (options.external ?? true) {
       this.external = await this.fetchExternal(this.repoRoot).catch(() => ({ prs: [] }));
     }
-    this.lastFingerprint = await this.fingerprint();
-    const stack = await resolveStack(this.repoRoot, this.external);
-    this.current = { stack, checkpointMode: this.checkpointMode, ...(await this.base(stack)) };
+    try {
+      this.lastFingerprint = await this.fingerprint();
+      const stack = await resolveStack(this.repoRoot, this.external);
+      this.current = { stack, checkpointMode: this.checkpointMode, ...(await this.base(stack)) };
+      this.lastError = undefined;
+    } catch (err) {
+      this.current = undefined;
+      this.lastError = (err as Error).message;
+    }
     this.emitter.fire();
+  }
+
+  get error(): string | undefined {
+    return this.lastError;
   }
 
   async files(): Promise<ChangedFile[]> {
@@ -69,7 +80,7 @@ export class ReviewState {
   }
 
   private async fingerprint(): Promise<string> {
-    const [head, refs, configPath] = await Promise.all([
+    const [head, refs, status, configPath] = await Promise.all([
       git(this.repoRoot, ['rev-parse', '--symbolic-full-name', 'HEAD', 'HEAD']).catch(() => ''),
       git(this.repoRoot, [
         'for-each-ref',
@@ -78,6 +89,7 @@ export class ReviewState {
         'refs/remotes/origin',
         'refs/revu',
       ]),
+      git(this.repoRoot, ['status', '--porcelain=v1', '-z']),
       git(this.repoRoot, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
     ]);
     let config = '';
@@ -86,7 +98,7 @@ export class ReviewState {
     } catch {
       config = '';
     }
-    return `${head}\n${refs}\n${config}`;
+    return `${head}\n${refs}\n${status}\n${config}`;
   }
 
   dispose(): void {

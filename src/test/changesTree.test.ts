@@ -192,7 +192,25 @@ suite('review state change check', () => {
     assert.strictEqual(await state.refreshIfChanged(), true);
     await commitFile(repo, 'second.txt');
     assert.strictEqual(await state.refreshIfChanged(), true);
-    assert.strictEqual(fired, 2);
+    fs.writeFileSync(path.join(repo, 'agent-scratch.txt'), 'uncommitted\n');
+    assert.strictEqual(await state.refreshIfChanged(), true);
+    assert.strictEqual(fired, 3);
     fs.rmSync(repo, { recursive: true, force: true });
+  });
+});
+
+suite('review state errors', () => {
+  test('a failed refresh reports the error in the Changes view instead of going stale', async () => {
+    const repo = await makeStack();
+    await commitFile(repo, 'first.txt');
+    await git(repo, ['checkout', '-q', '--orphan', 'unrelated']);
+    await commitFile(repo, 'other.txt');
+    await git(repo, ['checkout', '-q', 'b']);
+    await git(repo, ['config', 'branch.b.revuParent', 'unrelated']);
+    const { provider, state, captured } = await setup(repo);
+
+    assert.ok(state.error);
+    assert.deepStrictEqual(await provider.getChildren(), []);
+    assert.ok(captured.message?.startsWith('Revu could not read this branch:'));
   });
 });
